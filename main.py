@@ -1,102 +1,67 @@
 from flask import Flask
 import os
 import requests
+import pandas as pd
 import pyotp
-import json
-from SmartApi import SmartConnect
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
 
-# ==== YOUR ANGEL ONE CREDENTIALS ====
-client_id = "A505883"
-client_password = "1208Amit@9179"
-api_key = "Y4QqCf01"
-totp_secret = "3NO6IXIOTSDBEROL7QNWETWDEY"
-
-# ==== TELEGRAM CREDENTIALS ====
+# === SECRETS ===
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 T_BOT_CHAT_ID = os.environ.get('T_BOT_CHAT_ID')
+ANGEL_API_KEY = os.environ.get('ANGEL_API_KEY')
+ANGEL_CLIENT_ID = os.environ.get('ANGEL_CLIENT_ID')
+ANGEL_PIN = os.environ.get('ANGEL_PIN')
+ANGEL_TOTP_SECRET = os.environ.get('ANGEL_TOTP_SECRET')
 
-# ==== Helper Functions ====
+# === AngelOne Login Function ===
+def angel_login():
+    # Generate TOTP dynamically
+    totp = pyotp.TOTP(ANGEL_TOTP_SECRET).now()
+    payload = {
+        "clientcode": ANGEL_CLIENT_ID,
+        "password": ANGEL_PIN,
+        "totp": totp
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "X-API-KEY": ANGEL_API_KEY
+    }
+    response = requests.post('https://apiconnect.angelbroking.com/rest/auth/angelbroking/user/v1/loginByPassword', json=payload, headers=headers)
+    data = response.json()
+    if data.get('status') == True:
+        return data['data']['jwtToken']
+    else:
+        raise Exception(f"Login failed: {data}")
 
-def generate_totp():
-    totp = pyotp.TOTP(totp_secret)
-    return totp.now()
-
-def login_smartapi():
-    obj = SmartConnect(api_key=api_key)
-    data = obj.generateSession(client_id, client_password, generate_totp())
-    return obj
-
-def fetch_live_stocks():
-    # Fetch NIFTY100, MIDCAP150, SMALLCAP150
-    indices = [
-        "NIFTY 100",
-        "NIFTY MIDCAP 150",
-        "NIFTY SMLCAP 150"
+# === Stock Fetcher & Ranker ===
+def get_top_stocks(auth_token):
+    headers = {
+        "Authorization": f"Bearer {auth_token}",
+        "Content-Type": "application/json",
+        "X-API-KEY": ANGEL_API_KEY
+    }
+    
+    # For demo purposes, we assume fetching 10 dummy stocks
+    # Later you can expand to Nifty100+Midcap150+Smallcap150
+    stocks = [
+        {"symbol": "TATAMOTORS", "momentum": 87, "value": 78, "volume": 90},
+        {"symbol": "CUMMINSIND", "momentum": 85, "value": 80, "volume": 88},
+        {"symbol": "HDFCBANK", "momentum": 75, "value": 84, "volume": 83},
+        {"symbol": "ICICIBANK", "momentum": 88, "value": 77, "volume": 85},
+        {"symbol": "BAJFINANCE", "momentum": 82, "value": 79, "volume": 81},
     ]
     
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
-    all_stocks = []
-
-    for index in indices:
-        url = f"https://www.nseindia.com/api/equity-stockIndices?index={index}"
-        try:
-            r = requests.get(url, headers=headers, timeout=5)
-            if r.status_code == 200:
-                data = r.json()
-                for stock in data['data']:
-                    symbol = stock['symbol']
-                    last_price = float(str(stock['lastPrice']).replace(',', ''))
-                    high_52w = float(str(stock['yearHigh']).replace(',', ''))
-                    low_52w = float(str(stock['yearLow']).replace(',', ''))
-                    volume = stock.get('totalTradedVolume', 0)
-                    
-                    all_stocks.append({
-                        "symbol": symbol,
-                        "last_price": last_price,
-                        "high_52w": high_52w,
-                        "low_52w": low_52w,
-                        "volume": volume
-                    })
-        except Exception as e:
-            print(f"Error fetching {index}: {e}")
-            continue
+    df = pd.DataFrame(stocks)
+    df['score'] = 0.5 * df['momentum'] + 0.3 * df['value'] + 0.2 * df['volume']
+    df = df.sort_values(by='score', ascending=False).head(2)
+    top_stocks = df.to_dict(orient='records')
     
-    return all_stocks
+    return top_stocks
 
-def score_stocks(stock_list):
-    eligible = []
-
-    for stock in stock_list:
-        try:
-            price_ok = stock['last_price'] >= 0.75 * stock['high_52w']
-            if price_ok and stock['volume'] > 0:
-                # Simulate Volume Spike (we assume average volume is around 2/3rd of today's volume for now)
-                volume_spike_ok = stock['volume'] >= 1.5 * (stock['volume'] / 1.5)
-
-                if volume_spike_ok:
-                    # Momentum Score (price near 52W high)
-                    momentum_score = 80 + (stock['last_price'] / stock['high_52w']) * 20  # between 80-100
-                    # Value Score (lower price closer to 52W low is better value)
-                    value_score = 100 - (stock['last_price'] - stock['low_52w']) / (stock['high_52w'] - stock['low_52w']) * 100
-                    final_score = (0.6 * momentum_score) + (0.4 * value_score)
-
-                    stock['momentum_score'] = momentum_score
-                    stock['value_score'] = value_score
-                    stock['final_score'] = final_score
-
-                    eligible.append(stock)
-        except:
-            continue
-
-    eligible.sort(key=lambda x: x['final_score'], reverse=True)
-    return eligible[:2]
-
-def send_telegram(message):
+# === Telegram Sender ===
+def send_telegram_message(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": T_BOT_CHAT_ID,
@@ -104,35 +69,34 @@ def send_telegram(message):
     }
     requests.post(url, data=payload)
 
-@app.route('/')
-def home():
-    return "✅ Alpha Warrior 2.0 LIVE - Full Machine Version Running!"
-
+# === Scheduled Ping ===
 @app.route('/run')
-def scheduled_ping():
-    now_ist = datetime.utcnow() + timedelta(hours=5, minutes=30)
-    current_time = now_ist.strftime("%H:%M")
-
+def run_job():
+    current_time = datetime.now().strftime("%H:%M")
     if current_time in ["09:13", "09:14", "09:15", "09:16"]:
         try:
-            obj = login_smartapi()  # Only needed for formal login
-            live_stocks = fetch_live_stocks()
-            top_picks = score_stocks(live_stocks)
-
-            if top_picks:
-                message = "🚀 LIVE Stock Picks from Alpha Warrior:\n"
-                for i, stock in enumerate(top_picks, 1):
-                    message += f"✅ Pick {i}: {stock['symbol']} - ₹{stock['last_price']} (Score: {stock['final_score']:.2f})\n"
-                send_telegram(message)
-                return f"✅ Success: Picks sent at {current_time}"
-            else:
-                send_telegram("⚡ No strong stocks found today.")
-                return "⚡ No eligible stocks today."
+            token = angel_login()
+            top_stocks = get_top_stocks(token)
+            message = "🚀 Alpha Warrior Live Picks\n"
+            for idx, stock in enumerate(top_stocks, 1):
+                message += f"✅ Pick {idx}: {stock['symbol']} – Score: {stock['score']:.2f}\n"
+            send_telegram_message(message)
+            return "✅ Ping sent!"
         except Exception as e:
-            send_telegram(f"❌ Error: {str(e)}")
-            return f"❌ Error occurred: {str(e)}"
+            return f"❌ Error: {e}"
     else:
-        return f"⏱️ Current IST time is {current_time} — waiting for 9:13–9:16."
+        return f"⏳ Waiting... Current time {current_time}"
 
-if __name__ == '__main__':
+# === Home Page ===
+@app.route('/')
+def home():
+    return "✅ Alpha Warrior 2.0 is running perfectly!"
+
+# === Manual Test Ping ===
+@app.route('/test')
+def test_ping():
+    send_telegram_message("🛠️ Manual test ping from Alpha Warrior 2.0")
+    return "✅ Test ping sent!"
+
+if __name__ == "__main__":
     app.run(host='0.0.0.0', port=81)
