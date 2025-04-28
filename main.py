@@ -73,7 +73,7 @@ def send_telegram_message(message):
 @app.route('/run')
 def run_job():
     current_time = datetime.now().strftime("%H:%M")
-    if "09:13" <= current_time <= "09:17":
+    if "09:15" <= current_time <= "09:20":
         try:
             token = angel_login()
             top_stocks = get_top_stocks(token)
