@@ -35,16 +35,31 @@ def angel_login():
         "X-Api-Key": os.environ.get('SMARTAPI_KEY'),
     }
 
-    response = requests.post("https://apiconnect.angelbroking.com/rest/auth/angelbroking/user/v1/loginByPassword", json=payload, headers=headers)
-    
-    if response.status_code == 200:
+    response = requests.post(
+        "https://apiconnect.angelbroking.com/rest/auth/angelbroking/user/v1/loginByPassword",
+        json=payload,
+        headers=headers
+    )
+
+    try:
         data = response.json()
-        session_data = {
-            "jwtToken": data['data']['jwtToken'],
-            "feedToken": data['data']['feedToken'],
-            "clientcode": data['data']['clientcode']
-        }
-        print("✅ Logged in successfully!")
+    except Exception as e:
+        print("❌ Failed to parse JSON:", e)
+        print("Response Text:", response.text)
+        return
+
+    if response.status_code != 200 or 'data' not in data:
+        print("❌ Login failed or unexpected response:")
+        print(data)
+        return
+
+    session_data = {
+        "jwtToken": data['data']['jwtToken'],
+        "feedToken": data['data']['feedToken'],
+        "clientcode": data['data']['clientcode']
+    }
+    print("✅ Logged in successfully!")
+
     else:
         print("❌ Login failed:", response.text)
 
