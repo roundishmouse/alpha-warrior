@@ -1,6 +1,4 @@
 flask
 requests
-pyotp
 pandas
-SmartApi
-pycryptodome
+smartapi-python
