@@ -11,8 +11,6 @@ import threading
 import pandas as pd
 import pyotp
 
-from smartapi.smartWebSocket import SmartWebSocket as WebSocket  # ✅ Import WebSocket properly
-
 # Global Variables
 session_data = {}
 live_data = {}
@@ -50,37 +48,69 @@ def angel_login():
     else:
         print("❌ Login failed:", response.text)
 
-# WebSocket Connection
-def start_websocket():
-    angel_login()  # Manual login instead of SmartConnect
+# Custom WebSocket Handler
+class AngelOneWebSocket:
+    def __init__(self, feed_token, client_code):
+        self.feed_token = feed_token
+        self.client_code = client_code
+        self.socket_opened = False
 
-    # Check if login was successful
+    def on_open(self, ws):
+        print("✅ WebSocket opened")
+        self.socket_opened = True
+        self.subscribe_tokens(ws)
+
+    def on_message(self, ws, message):
+        global live_data
+        print("Received Tick:", message)
+        # You can process and store live_data here if needed
+
+    def on_error(self, ws, error):
+        print("WebSocket Error:", error)
+
+    def on_close(self, ws):
+        print("❌ WebSocket closed")
+
+    def subscribe_tokens(self, ws):
+        with open("token_list.txt", "r") as f:
+            tokens = f.read().splitlines()
+
+        for token in tokens:
+            data = {
+                "task": "subscribe",
+                "channel": token,
+                "token": self.feed_token,
+                "user": self.client_code
+            }
+            ws.send(json.dumps(data))
+            print(f"Subscribed: {token}")
+
+    def connect(self):
+        websocket_url = f"wss://smartapisocket.angelone.in/smart-stream"
+        ws = websocket.WebSocketApp(websocket_url,
+                                    on_open=self.on_open,
+                                    on_message=self.on_message,
+                                    on_error=self.on_error,
+                                    on_close=self.on_close)
+
+        wst = threading.Thread(target=ws.run_forever)
+        wst.daemon = True
+        wst.start()
+
+# WebSocket Starter
+def start_websocket():
+    angel_login()
+
     if not session_data or not all(k in session_data for k in ('feedToken', 'jwtToken', 'clientcode')):
         print("Login failed or session data missing")
         print(session_data)
         return
 
     feed_token = session_data['feedToken']
-    jwt_token = session_data['jwtToken']
+    jwt_token = session_data['jwtToken']  # not needed here but kept for future use
     client_code = session_data['clientcode']
 
-    ws = WebSocket(feed_token, client_code, jwt_token)
-
-    # Load tokens from file
-    with open("token_list.txt", "r") as f:
-        tokens = f.read().splitlines()
-
-    def on_tick(ws, tick):
-        global live_data
-        print("Received Tick:", tick)
-        # You can also update live_data here if needed
-
-    def on_connect(ws, response):
-        print("✅ WebSocket connection opened")
-        ws.subscribe(tokens)
-
-    ws.on_ticks = on_tick
-    ws.on_connect = on_connect
+    ws = AngelOneWebSocket(feed_token, client_code)
     ws.connect()
 
 # Top Stocks Analysis
