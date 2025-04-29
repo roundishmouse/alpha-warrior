@@ -48,6 +48,11 @@ def angel_login():
         print("Response Text:", response.text)
         return
 
+    if not isinstance(data, dict):
+        print("❌ Login failed: Response is not a valid JSON dictionary")
+        print("Response:", data)
+        return
+
     if response.status_code != 200 or 'data' not in data:
         print("❌ Login failed or unexpected response:")
         print(data)
