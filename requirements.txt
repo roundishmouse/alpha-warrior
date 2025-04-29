@@ -1,4 +1,4 @@
 flask
 requests
 pandas
-smartapi-python
+smartapi-python==1.0.3
