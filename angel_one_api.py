@@ -10,13 +10,11 @@ import requests
 session_data = {}
 
 # Custom TOTP generator
+import pyotp
+
 def generate_totp(secret):
-    key = base64.b32decode(secret, True)
-    msg = struct.pack(">Q", int(time.time()) // 30)
-    h = hmac.new(key, msg, hashlib.sha1).digest()
-    o = h[19] & 15
-    token = (struct.unpack(">I", h[o:o+4])[0] & 0x7fffffff) % 1000000
-    return str(token).zfill(6)
+    return pyotp.TOTP(secret).now()
+
 
 # Manual Login Function
 def angel_login():
