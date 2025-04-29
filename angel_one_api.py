@@ -46,24 +46,27 @@ def angel_login():
     except Exception as e:
         print("❌ Failed to parse JSON:", e)
         print("Response Text:", response.text)
-        return
+        return  # ⚡ RETURN immediately if JSON parsing fails
 
     if not isinstance(data, dict):
-        print("❌ Login failed: Response is not a valid JSON dictionary")
+        print("❌ Login failed: Response is not a valid dictionary")
         print("Response:", data)
-        return
+        return  # ⚡ RETURN if data is not a dictionary
 
-    if response.status_code != 200 or 'data' not in data:
-        print("❌ Login failed or unexpected response:")
-        print(data)
-        return
+    if 'data' not in data:
+        print("❌ Login failed or unexpected response structure")
+        print("Response:", data)
+        return  # ⚡ RETURN if 'data' key is missing
 
+    # Only if everything is good, then move forward
     session_data = {
         "jwtToken": data['data']['jwtToken'],
         "feedToken": data['data']['feedToken'],
         "clientcode": data['data']['clientcode']
     }
     print("✅ Logged in successfully!")
+
+
 
 
 # Custom WebSocket Handler
