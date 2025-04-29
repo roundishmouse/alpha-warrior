@@ -5,16 +5,21 @@ import base64
 import struct
 import hashlib
 import requests
+import json
+import websocket
+import threading
+import pandas as pd
+import pyotp
+
+from smartapi.smartWebSocket import SmartWebSocket as WebSocket  # ✅ Import WebSocket properly
 
 # Global Variables
 session_data = {}
+live_data = {}
 
 # Custom TOTP generator
-import pyotp
-
 def generate_totp(secret):
     return pyotp.TOTP(secret).now()
-
 
 # Manual Login Function
 def angel_login():
@@ -44,46 +49,41 @@ def angel_login():
         print("✅ Logged in successfully!")
     else:
         print("❌ Login failed:", response.text)
-import json
-import websocket
-import threading
 
-# Global dictionary to store live data
-live_data = {}
-
+# WebSocket Connection
 def start_websocket():
-  angel_login()  # manually logs in and sets global session_data
+    angel_login()  # Manual login instead of SmartConnect
 
-# Add this check to prevent crash
-if not session_data or not all(k in session_data for k in ('feedToken', 'jwtToken', 'clientcode')):
-    print("Login failed or session data missing")
-    print(session_data)
-    return
+    # Check if login was successful
+    if not session_data or not all(k in session_data for k in ('feedToken', 'jwtToken', 'clientcode')):
+        print("Login failed or session data missing")
+        print(session_data)
+        return
 
+    feed_token = session_data['feedToken']
+    jwt_token = session_data['jwtToken']
+    client_code = session_data['clientcode']
 
-    feed_token = session_data['data']['feedToken']
-    jwt_token = session_data['data']['jwtToken']
-    client_code = session_data['data']['clientcode']
+    ws = WebSocket(feed_token, client_code, jwt_token)
 
-    websocket = WebSocket(feed_token, client_code, jwt_token)
-
-    # Load tokens
+    # Load tokens from file
     with open("token_list.txt", "r") as f:
         tokens = f.read().splitlines()
 
     def on_tick(ws, tick):
         global live_data
-        # your logic here
+        print("Received Tick:", tick)
+        # You can also update live_data here if needed
 
     def on_connect(ws, response):
+        print("✅ WebSocket connection opened")
         ws.subscribe(tokens)
 
-    websocket.on_ticks = on_tick
-    websocket.on_connect = on_connect
-    websocket.connect()
+    ws.on_ticks = on_tick
+    ws.on_connect = on_connect
+    ws.connect()
 
-import pandas as pd
-
+# Top Stocks Analysis
 def get_top_stocks():
     global live_data
 
@@ -97,7 +97,7 @@ def get_top_stocks():
     df = df[df['ltp'] > 100]  # Minimum price
     df['distance_from_high'] = 1 - (df['ltp'] / df['high'])
     df = df[df['distance_from_high'] <= 0.25]  # Within 25% of 52-week high
-    df['volume_spike'] = df['volume'] / df['open']  # Volume spike (using open as fallback)
+    df['volume_spike'] = df['volume'] / df['open']  # Volume spike (open price fallback)
     df = df[df['volume_spike'] >= 1.2]  # Minimum 20% spike in volume
     df['momentum'] = (df['ltp'] / df['open']) - 1  # Momentum score
     df['score'] = df['momentum'] * 100  # Final scoring
