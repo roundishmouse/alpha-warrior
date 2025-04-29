@@ -1,4 +1,4 @@
 flask
 requests
 pandas
-git+https://github.com/angel-one/smartapi-python.git
+websocket-client
