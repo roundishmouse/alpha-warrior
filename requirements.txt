@@ -1,6 +1,4 @@
-flask
-requests
-pandas
 websocket-client
+requests
 pyotp
-smartapi-python==0.0.6
+pandas
