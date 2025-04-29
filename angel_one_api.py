@@ -60,8 +60,6 @@ def angel_login():
     }
     print("✅ Logged in successfully!")
 
-    else:
-        print("❌ Login failed:", response.text)
 
 # Custom WebSocket Handler
 class AngelOneWebSocket:
