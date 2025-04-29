@@ -1,32 +1,78 @@
+import os
 import pandas as pd
-import requests
+import pyotp
+from smartapi import SmartConnect
+from smartapi import WebSocket
 
-def get_top_stocks(token):
-    # Fetch real or sample stock data
-    df = pd.read_csv("https://raw.githubusercontent.com/roundishmouse/nse-data/main/sample-stock-data.csv")
+# Global Variables
+live_data = {}
 
-    # Filter 1: Avoid penny stocks
-    df = df[df["price"] > 100]
+def angel_login():
+    obj = SmartConnect(api_key=os.environ.get('SMARTAPI_KEY'))
+    session_data = obj.generateSession(
+        os.environ.get('SMARTAPI_CLIENT'),
+        os.environ.get('SMARTAPI_PASSWORD'),
+        pyotp.TOTP(os.environ.get('SMARTAPI_TOTP')).now()
+    )
+    return obj
 
-    # Filter 2: Within 25% of 52-week high
-    df["distance_from_high"] = 1 - (df["price"] / df["52_week_high"])
-    df = df[df["distance_from_high"] <= 0.25]
+def start_websocket():
+    api_key = os.environ.get('SMARTAPI_KEY')
+    client_code = os.environ.get('SMARTAPI_CLIENT')
+    password = os.environ.get('SMARTAPI_PASSWORD')
+    totp = pyotp.TOTP(os.environ.get('SMARTAPI_TOTP')).now()
 
-    # Filter 3: Volume spike (current volume at least 1.2× 50-day average)
-    df["volume_spike"] = df["volume"] / df["avg_volume_50d"]
-    df = df[df["volume_spike"] >= 1.2]
+    obj = SmartConnect(api_key=api_key)
+    session_data = obj.generateSession(client_code, password, totp)
 
-    # Momentum score based on 3-month price growth
-    df["momentum"] = df["price"] / df["price_3m_ago"] - 1
+    feed_token = session_data['data']['feedToken']
+    jwttoken = session_data['data']['jwtToken']
+    client_code = session_data['data']['clientcode']
 
-    # Final score: momentum * 100
-    df["score"] = df["momentum"] * 100
+    websocket = WebSocket(feed_token, client_code)
 
-    # Sort and return top 2
-    top_stocks = df.sort_values(by="score", ascending=False).head(2)
-    
-    # Fallback: If no stock passes, return message
+    # List of Tokens you want to subscribe
+    with open("token_list.txt", "r") as f:
+        tokens = f.read().splitlines()
+
+    # Callback functions
+    def on_tick(ws, tick):
+        global live_data
+        symbol = tick['tradingsymbol']
+        live_data[symbol] = {
+            'ltp': tick['ltp'],
+            'volume': tick['volume'],
+            'high': tick['high_price'],
+            'open': tick['open_price']
+        }
+
+    def on_connect(ws, response):
+        ws.subscribe(tokens)
+
+    websocket.on_ticks = on_tick
+    websocket.on_connect = on_connect
+    websocket.connect()
+
+def get_top_stocks():
+    global live_data
+    if not live_data:
+        return [{"symbol": "No Picks Yet", "score": 0}]
+
+    df = pd.DataFrame.from_dict(live_data, orient='index')
+    df = df.reset_index().rename(columns={'index': 'symbol'})
+
+    # Apply Filters
+    df = df[df['ltp'] > 100]
+    df['distance_from_high'] = 1 - (df['ltp'] / df['high'])
+    df = df[df['distance_from_high'] <= 0.25]
+    df['volume_spike'] = df['volume'] / df['open']  # open is used as fallback for avg volume
+    df = df[df['volume_spike'] >= 1.2]
+    df['momentum'] = (df['ltp'] / df['open']) - 1
+    df['score'] = df['momentum'] * 100
+
+    top_stocks = df.sort_values(by='score', ascending=False).head(2)
+
     if top_stocks.empty:
-        return [{"symbol": "No picks", "score": 0}]
+        return [{"symbol": "No Picks Passed", "score": 0}]
 
-    return top_stocks[["symbol", "score"]].to_dict(orient="records")
+    return top_stocks[['symbol', 'score']].to_dict(orient='records')
