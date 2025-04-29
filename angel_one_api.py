@@ -1,41 +1,53 @@
 import os
+import time
+import hmac
+import base64
+import struct
+import hashlib
 import pandas as pd
-import pyotp
-from smartapi import SmartConnect
-from smartapi import WebSocket
+from smartapi import SmartConnect, WebSocket
 
-# Global Variables
+# Global live data store
 live_data = {}
 
+# Custom TOTP generator (replaces pyotp)
+def generate_totp(secret):
+    key = base64.b32decode(secret, True)
+    msg = struct.pack(">Q", int(time.time()) // 30)
+    h = hmac.new(key, msg, hashlib.sha1).digest()
+    o = h[19] & 15
+    token = (struct.unpack(">I", h[o:o+4])[0] & 0x7fffffff) % 1000000
+    return str(token).zfill(6)
+
+# Angel One login
 def angel_login():
     obj = SmartConnect(api_key=os.environ.get('SMARTAPI_KEY'))
     session_data = obj.generateSession(
         os.environ.get('SMARTAPI_CLIENT'),
         os.environ.get('SMARTAPI_PASSWORD'),
-        pyotp.TOTP(os.environ.get('SMARTAPI_TOTP')).now()
+        generate_totp(os.environ.get('SMARTAPI_TOTP'))
     )
     return obj
 
+# Start WebSocket for real-time data
 def start_websocket():
     api_key = os.environ.get('SMARTAPI_KEY')
     client_code = os.environ.get('SMARTAPI_CLIENT')
     password = os.environ.get('SMARTAPI_PASSWORD')
-    totp = pyotp.TOTP(os.environ.get('SMARTAPI_TOTP')).now()
+    totp = generate_totp(os.environ.get('SMARTAPI_TOTP'))
 
     obj = SmartConnect(api_key=api_key)
     session_data = obj.generateSession(client_code, password, totp)
 
     feed_token = session_data['data']['feedToken']
-    jwttoken = session_data['data']['jwtToken']
     client_code = session_data['data']['clientcode']
 
     websocket = WebSocket(feed_token, client_code)
 
-    # List of Tokens you want to subscribe
+    # Token list (ensure token_list.txt is present)
     with open("token_list.txt", "r") as f:
         tokens = f.read().splitlines()
 
-    # Callback functions
     def on_tick(ws, tick):
         global live_data
         symbol = tick['tradingsymbol']
@@ -53,6 +65,7 @@ def start_websocket():
     websocket.on_connect = on_connect
     websocket.connect()
 
+# Stock scoring & filtering logic
 def get_top_stocks():
     global live_data
     if not live_data:
@@ -61,11 +74,10 @@ def get_top_stocks():
     df = pd.DataFrame.from_dict(live_data, orient='index')
     df = df.reset_index().rename(columns={'index': 'symbol'})
 
-    # Apply Filters
     df = df[df['ltp'] > 100]
     df['distance_from_high'] = 1 - (df['ltp'] / df['high'])
     df = df[df['distance_from_high'] <= 0.25]
-    df['volume_spike'] = df['volume'] / df['open']  # open is used as fallback for avg volume
+    df['volume_spike'] = df['volume'] / df['open']
     df = df[df['volume_spike'] >= 1.2]
     df['momentum'] = (df['ltp'] / df['open']) - 1
     df['score'] = df['momentum'] * 100
