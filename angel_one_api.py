@@ -54,64 +54,41 @@ import threading
 live_data = {}
 
 def start_websocket():
-    global session_data
+    api_key = os.environ.get('SMARTAPI_KEY')
+    client_code = os.environ.get('SMARTAPI_CLIENT')
+    password = os.environ.get('SMARTAPI_PASSWORD')
+    totp = generate_totp(os.environ.get('SMARTAPI_TOTP'))
 
-    feed_token = session_data['feedToken']
-    client_code = session_data['clientcode']
+    obj = SmartConnect(api_key=api_key)
+    session_data = obj.generateSession(client_code, password, totp)
 
-    ws_url = f"wss://smartapisocket.angelone.in/smart-stream?client_code={client_code}&feed_token={feed_token}"
+    # Add this check to prevent crash
+    if 'data' not in session_data or 'feedToken' not in session_data['data']:
+        print("Login failed or feedToken missing")
+        print(session_data)
+        return
 
-    def on_open(ws):
-        print("✅ WebSocket connection opened!")
-        
-        # Load tokens to subscribe
-        tokens = []
-        with open("token_list.txt", "r") as f:
-            for line in f:
-                tokens.append(line.strip())
+    feed_token = session_data['data']['feedToken']
+    jwt_token = session_data['data']['jwtToken']
+    client_code = session_data['data']['clientcode']
 
-        # Subscribe to tokens
-        for token in tokens:
-            subscribe_payload = {
-                "action": 1,
-                "params": {
-                    "mode": "FULL",
-                    "tokenList": [token]
-                }
-            }
-            ws.send(json.dumps(subscribe_payload))
-            print(f"✅ Subscribed to: {token}")
+    websocket = WebSocket(feed_token, client_code, jwt_token)
 
-    def on_message(ws, message):
+    # Load tokens
+    with open("token_list.txt", "r") as f:
+        tokens = f.read().splitlines()
+
+    def on_tick(ws, tick):
         global live_data
+        # your logic here
 
-        data = json.loads(message)
-        
-        if data.get('data'):
-            for stock in data['data']:
-                symbol = stock.get('symbol', 'Unknown')
-                live_data[symbol] = {
-                    "ltp": stock.get('ltp', 0),
-                    "volume": stock.get('volume', 0),
-                    "high": stock.get('high', 0),
-                    "open": stock.get('open', 1)  # Avoid division by zero
-                }
+    def on_connect(ws, response):
+        ws.subscribe(tokens)
 
-    def on_error(ws, error):
-        print(f"❌ WebSocket Error: {error}")
+    websocket.on_ticks = on_tick
+    websocket.on_connect = on_connect
+    websocket.connect()
 
-    def on_close(ws, close_status_code, close_msg):
-        print("❌ WebSocket connection closed")
-
-    ws = websocket.WebSocketApp(ws_url,
-                                 on_open=on_open,
-                                 on_message=on_message,
-                                 on_error=on_error,
-                                 on_close=on_close)
-    
-    # Start WebSocket in a new thread
-    wst = threading.Thread(target=ws.run_forever)
-    wst.start()
 import pandas as pd
 
 def get_top_stocks():
