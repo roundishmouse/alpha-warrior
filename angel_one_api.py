@@ -52,19 +52,14 @@ import threading
 live_data = {}
 
 def start_websocket():
-    api_key = os.environ.get('SMARTAPI_KEY')
-    client_code = os.environ.get('SMARTAPI_CLIENT')
-    password = os.environ.get('SMARTAPI_PASSWORD')
-    totp = generate_totp(os.environ.get('SMARTAPI_TOTP'))
+  angel_login()  # manually logs in and sets global session_data
 
-    obj = SmartConnect(api_key=api_key)
-    session_data = obj.generateSession(client_code, password, totp)
+# Add this check to prevent crash
+if not session_data or not all(k in session_data for k in ('feedToken', 'jwtToken', 'clientcode')):
+    print("Login failed or session data missing")
+    print(session_data)
+    return
 
-    # Add this check to prevent crash
-    if 'data' not in session_data or 'feedToken' not in session_data['data']:
-        print("Login failed or feedToken missing")
-        print(session_data)
-        return
 
     feed_token = session_data['data']['feedToken']
     jwt_token = session_data['data']['jwtToken']
