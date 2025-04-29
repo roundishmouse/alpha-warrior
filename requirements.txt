@@ -3,4 +3,4 @@ requests
 pandas
 websocket-client
 pyotp
-smartapi-python
+smartapi-python==0.0.6
