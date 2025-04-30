@@ -11,6 +11,9 @@ import threading
 import pandas as pd
 import pyotp
 
+def generate_totp(secret):
+    return pyotp.TOTP(secret).now()
+
 # Global Variables
 session_data = {}
 live_data = {}
