@@ -3,6 +3,11 @@ from angel_one_api import start_websocket
 import requests
 
 app = Flask(__name__)
+import requests
+
+@app.route("/my-ip")
+def my_ip():
+    return requests.get("https://ifconfig.me").text
 
 @app.route("/")
 def home():
