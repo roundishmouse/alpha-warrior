@@ -16,10 +16,6 @@ session_data = {}
 live_data = {}
 
 # Custom TOTP generator
-def generate_totp(secret):
-    return pyotp.TOTP(secret).now()
-
-# Manual Login Function
 def angel_login():
     global session_data
 
@@ -35,6 +31,7 @@ def angel_login():
         "X-Api-Key": os.environ.get('SMARTAPI_KEY'),
     }
 
+    print("⏳ Sending login request...")
     response = requests.post(
         "https://apiconnect.angelbroking.com/rest/auth/angelbroking/user/v1/loginByPassword",
         json=payload,
@@ -43,32 +40,31 @@ def angel_login():
 
     try:
         data = response.json()
+        print("📦 Response JSON:", data)
     except Exception as e:
         print("❌ Failed to parse JSON:", e)
         print("Response Text:", response.text)
-        return  # ⚡ RETURN immediately if JSON parsing fails
+        return
 
     if not isinstance(data, dict):
-        print("❌ Login failed: Response is not a valid dictionary")
-        print("Response:", data)
-        return  # ⚡ RETURN if data is not a dictionary
+        print("❌ Response is not a dictionary")
+        return
 
     if 'data' not in data:
-        print("❌ Login failed or unexpected response structure")
-        print("Response:", data)
-        return  # ⚡ RETURN if 'data' key is missing
+        print("❌ Login failed or 'data' key missing")
+        return
 
-    # Only if everything is good, then move forward
-    session_data = {
-        "jwtToken": data['data']['jwtToken'],
-        "feedToken": data['data']['feedToken'],
-        "clientcode": data['data']['clientcode']
-    }
-    print("✅ Logged in successfully!")
-
-
-
-
+    try:
+        session_data = {
+            "jwtToken": data['data']['jwtToken'],
+            "feedToken": data['data']['feedToken'],
+            "clientcode": data['data']['clientcode']
+        }
+        print("✅ Logged in successfully!")
+    except Exception as e:
+        print("❌ Unexpected structure in 'data':", e)
+        print("Data content:", data['data'])
+        return
 # Custom WebSocket Handler
 class AngelOneWebSocket:
     def __init__(self, feed_token, client_code):
