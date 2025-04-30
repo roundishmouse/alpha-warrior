@@ -1,9 +1,4 @@
 import os
-import time
-import hmac
-import base64
-import struct
-import hashlib
 import requests
 import json
 import websocket
@@ -11,14 +6,15 @@ import threading
 import pandas as pd
 import pyotp
 
-def generate_totp(secret):
-    return pyotp.TOTP(secret).now()
-
 # Global Variables
 session_data = {}
 live_data = {}
 
-# Custom TOTP generator
+# Generate TOTP from secret
+def generate_totp(secret):
+    return pyotp.TOTP(secret).now()
+
+# AngelOne Login with error handling
 def angel_login():
     global session_data
 
@@ -53,22 +49,25 @@ def angel_login():
         print("❌ Response is not a dictionary")
         return
 
-    if 'data' not in data:
-        print("❌ Login failed or 'data' key missing")
+    token_data = data.get('data')
+    if not isinstance(token_data, dict):
+        print("❌ Login failed: 'data' is not a dictionary")
+        print("Data content:", token_data)
         return
 
     try:
         session_data = {
-            "jwtToken": data['data']['jwtToken'],
-            "feedToken": data['data']['feedToken'],
-            "clientcode": data['data']['clientcode']
+            "jwtToken": token_data['jwtToken'],
+            "feedToken": token_data['feedToken'],
+            "clientcode": token_data['clientcode']
         }
         print("✅ Logged in successfully!")
     except Exception as e:
-        print("❌ Unexpected structure in 'data':", e)
-        print("Data content:", data['data'])
+        print("❌ Failed to extract token details:", e)
+        print("Raw token_data:", token_data)
         return
-# Custom WebSocket Handler
+
+# WebSocket Client for Tick Data
 class AngelOneWebSocket:
     def __init__(self, feed_token, client_code):
         self.feed_token = feed_token
@@ -83,7 +82,7 @@ class AngelOneWebSocket:
     def on_message(self, ws, message):
         global live_data
         print("Received Tick:", message)
-        # You can process and store live_data here if needed
+        # You can parse and store ticks into live_data here if needed
 
     def on_error(self, ws, error):
         print("WebSocket Error:", error)
@@ -106,7 +105,7 @@ class AngelOneWebSocket:
             print(f"Subscribed: {token}")
 
     def connect(self):
-        websocket_url = f"wss://smartapisocket.angelone.in/smart-stream"
+        websocket_url = "wss://smartapisocket.angelone.in/smart-stream"
         ws = websocket.WebSocketApp(websocket_url,
                                     on_open=self.on_open,
                                     on_message=self.on_message,
@@ -117,7 +116,7 @@ class AngelOneWebSocket:
         wst.daemon = True
         wst.start()
 
-# WebSocket Starter
+# Function to start login and connect to WebSocket
 def start_websocket():
     angel_login()
 
@@ -127,13 +126,11 @@ def start_websocket():
         return
 
     feed_token = session_data['feedToken']
-    jwt_token = session_data['jwtToken']  # not needed here but kept for future use
     client_code = session_data['clientcode']
-
     ws = AngelOneWebSocket(feed_token, client_code)
     ws.connect()
 
-# Top Stocks Analysis
+# Ranking function for top stocks
 def get_top_stocks():
     global live_data
 
@@ -143,14 +140,13 @@ def get_top_stocks():
     df = pd.DataFrame.from_dict(live_data, orient='index')
     df = df.reset_index().rename(columns={'index': 'symbol'})
 
-    # Apply Filters
-    df = df[df['ltp'] > 100]  # Minimum price
+    df = df[df['ltp'] > 100]
     df['distance_from_high'] = 1 - (df['ltp'] / df['high'])
-    df = df[df['distance_from_high'] <= 0.25]  # Within 25% of 52-week high
-    df['volume_spike'] = df['volume'] / df['open']  # Volume spike (open price fallback)
-    df = df[df['volume_spike'] >= 1.2]  # Minimum 20% spike in volume
-    df['momentum'] = (df['ltp'] / df['open']) - 1  # Momentum score
-    df['score'] = df['momentum'] * 100  # Final scoring
+    df = df[df['distance_from_high'] <= 0.25]
+    df['volume_spike'] = df['volume'] / df['open']
+    df = df[df['volume_spike'] >= 1.2]
+    df['momentum'] = (df['ltp'] / df['open']) - 1
+    df['score'] = df['momentum'] * 100
 
     top_stocks = df.sort_values(by='score', ascending=False).head(2)
 
