@@ -1,6 +1,6 @@
 import os
-from SmartApi import SmartConnect
 import pyotp
+from smartapi.smartConnect import SmartConnect
 
 # Read environment variables
 API_KEY = os.environ.get("SMARTAPI_API_KEY")
@@ -14,24 +14,20 @@ def generate_totp(secret):
     return pyotp.TOTP(secret).now()
 
 def angel_login():
-    data = {
-        "client_code": CLIENT_CODE,
-        "password": PIN,
-        "totp": generate_totp(TOTP_SECRET)
-    }
     try:
-        session = obj.generateSession(data["client_code"], data["password"], data["totp"])
+        totp = generate_totp(TOTP_SECRET)
+        session = obj.generateSession(CLIENT_CODE, PIN, totp)
         print("✅ Login successful!")
         print("Token:", session["data"]["jwtToken"])
         return session["data"]
     except Exception as e:
-        print("❌ Login failed or session data missing")
+        print("❌ Login failed")
         print(e)
         return {}
 
 def start_websocket():
     session_data = angel_login()
-    if not isinstance(session_data, dict):
-        print("❌ Login failed: 'data' is not a dictionary")
+    if not isinstance(session_data, dict) or "jwtToken" not in session_data:
+        print("❌ Login failed or invalid token structure")
         return
-    # Continue with WebSocket if needed
+    # You can expand this with WebSocket logic after successful login
