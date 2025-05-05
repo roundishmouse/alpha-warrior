@@ -1,27 +1,22 @@
 from flask import Flask
 from angel_one_api import start_websocket
-import requests
 
 app = Flask(__name__)
-import requests
-
-@app.route("/my-ip")
-def my_ip():
-    return requests.get("https://ifconfig.me").text
 
 @app.route("/")
 def home():
-    return "✅ Quantalgo backend is live."
+    return "Alpha Warrior Bot is Live!"
 
 @app.route("/callback")
 def callback():
     return "✅ Callback received from SmartAPI."
 
 @app.route("/my-ip")
-def my_ip():
-    # Optional: for debugging — gives your server's public IP
-    return requests.get("https://ifconfig.me").text
+def get_ip():
+    import requests
+    return requests.get("https://api64.ipify.org").text
 
 if __name__ == "__main__":
-    start_websocket()  # This handles login + WebSocket connection
+    print("⏳ Sending login request...")
+    start_websocket()
     app.run(host="0.0.0.0", port=81)
