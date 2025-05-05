@@ -1,6 +1,6 @@
 import os
 import pyotp
-from smartapi.smartConnect import SmartConnect
+from Smartapi.smartConnect import SmartConnect
 
 # Read environment variables
 API_KEY = os.environ.get("SMARTAPI_API_KEY")
