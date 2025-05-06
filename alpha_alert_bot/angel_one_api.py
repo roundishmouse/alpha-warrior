@@ -25,7 +25,7 @@ def start_websocket():
         {"symbol": "INFY", "entry": 1400, "target": 1680, "stop_loss": 1260, "rank": 1},
         {"symbol": "TATAMOTORS", "entry": 920, "target": 1104, "stop_loss": 828, "rank": 2}
     ]
-    today = datetime.now().strftime("%d-%b-%Y")
+
     today = datetime.now().strftime("%d-%b-%Y")
 message = f"<b>📊 Top Quant Picks - {today}</b>\n\n"
 for stock in picks:
