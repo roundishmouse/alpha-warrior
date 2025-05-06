@@ -1,5 +1,0 @@
-flask
-websocket-client
-requests
-pyotp
-pandas
