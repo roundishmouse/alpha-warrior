@@ -1,8 +1,8 @@
-
 import os
 import requests
 import json
 from datetime import datetime, timedelta
+from instrument_parser import get_token_for_symbols
 
 def send_telegram(message):
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -11,7 +11,7 @@ def send_telegram(message):
     payload = {
         "chat_id": chat_id,
         "text": message,
-        "parse_mode": "Markdown"
+        "parse_mode": "HTML"
     }
     try:
         r = requests.post(url, data=payload)
@@ -22,11 +22,16 @@ def send_telegram(message):
 def start_websocket():
     from token_list import final_top_picks as picks
 
+    # Get live tokens
+    symbols = [stock['symbol'] for stock in picks]
+    token_map = get_token_for_symbols(symbols)
+
     today = datetime.now().strftime("%d-%b-%Y")
-    message = f"**📊 Top Quant Picks – {today}**\n\n"
+    message = f"<b>⚡ Top Quant Picks – {today}</b>\n\n"
 
     for stock in picks:
-        message += f"**Rank #{stock['rank']}**: {stock['symbol']}\n"
+        token = token_map.get(stock['symbol'], 'N/A')
+        message += f"<b>#{stock['rank']} {stock['symbol']} ({token})</b>\n"
         message += f"Entry: {stock['entry']}\n"
         message += f"Target: {stock['target']}\n"
         message += f"Stop Loss: {stock['stop_loss']}\n"
