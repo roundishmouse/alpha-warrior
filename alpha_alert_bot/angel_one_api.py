@@ -11,7 +11,7 @@ def send_telegram(message):
     payload = {
         "chat_id": chat_id,
         "text": message,
-        "parse_mode": "HTML"
+        "parse_mode": "Markdown"
     }
     try:
         r = requests.post(url, data=payload)
@@ -23,15 +23,13 @@ def start_websocket():
     from token_list import final_top_picks as picks
 
     today = datetime.now().strftime("%d-%b-%Y")
-    message = f"<b>📊 Top Quant Picks - {today}</b>\n\n"
+    message = f"**📊 Top Quant Picks – {today}**\n\n"
 
     for stock in picks:
-        message += f"<b>Rank #{stock['rank']}</b>: {stock['symbol']}<br>"
-        message += f"Entry: {stock['entry']}<br>"
-        message += f"Target: {stock['target']}<br>"
-        message += f"Stop Loss: {stock['stop_loss']}<br>"
-        message += f"Exit by: {(datetime.now() + timedelta(days=30)).strftime('%d-%b-%Y')}<br><br>"
+        message += f"**Rank #{stock['rank']}**: {stock['symbol']}\n"
+        message += f"Entry: {stock['entry']}\n"
+        message += f"Target: {stock['target']}\n"
+        message += f"Stop Loss: {stock['stop_loss']}\n"
+        message += f"Exit by: {(datetime.now() + timedelta(days=30)).strftime('%d-%b-%Y')}\n\n"
 
     send_telegram(message)
-
-
