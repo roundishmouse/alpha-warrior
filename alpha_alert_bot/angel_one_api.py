@@ -2,7 +2,7 @@ import os
 import json
 import requests
 import pandas as pd
-from smartapi.smartConnect import SmartConnect
+from Smartapi.smartConnect import SmartConnect
 
 session_data = {}
 
