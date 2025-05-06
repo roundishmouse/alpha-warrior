@@ -3,4 +3,4 @@ websocket-client
 requests
 pyotp
 pandas
-smartapi-python
+git+https://github.com/angel-one/smartapi-python.git
