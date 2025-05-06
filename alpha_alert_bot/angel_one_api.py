@@ -20,16 +20,18 @@ def send_telegram(message):
         print("Telegram Error:", e)
 
 def start_websocket():
-   from token_list import final_top_picks as picks
+    from token_list import final_top_picks as picks
 
     today = datetime.now().strftime("%d-%b-%Y")
-message = f"<b>📊 Top Quant Picks - {today}</b>\n\n"
-for stock in picks:
-    message += f"<b>Rank #{stock['rank']}</b>: {stock['symbol']}<br>"
-    message += f"Entry: {stock['entry']}<br>"
-    message += f"Target: {stock['target']}<br>"
-    message += f"Stop Loss: {stock['stop_loss']}<br>"
-    message += f"Exit by: {(datetime.now() + timedelta(days=30)).strftime('%d-%b-%Y')}<br><br>"
+    message = f"<b>📊 Top Quant Picks - {today}</b>\n\n"
 
-send_telegram(message)
+    for stock in picks:
+        message += f"<b>Rank #{stock['rank']}</b>: {stock['symbol']}<br>"
+        message += f"Entry: {stock['entry']}<br>"
+        message += f"Target: {stock['target']}<br>"
+        message += f"Stop Loss: {stock['stop_loss']}<br>"
+        message += f"Exit by: {(datetime.now() + timedelta(days=30)).strftime('%d-%b-%Y')}<br><br>"
+
+    send_telegram(message)
+
 
