@@ -22,7 +22,7 @@ def send_telegram(message):
         print("Telegram Error:", e)
 
 def start_websocket():
-    picks = get_token_for_symbols()
+    picks = get_token_for_symbols(final_top_picks)
 
     today = datetime.now().strftime("%d-%b-%Y")
     message = f"<b>📊 Top Quant Picks - {today}</b>\n\n"
