@@ -11,7 +11,7 @@ def send_telegram(message):
     payload = {
         "chat_id": chat_id,
         "text": message,
-        "parse_mode": "Markdown"
+        "parse_mode": "HTML"
     }
     try:
         r = requests.post(url, data=payload)
@@ -26,14 +26,14 @@ def start_websocket():
         {"symbol": "TATAMOTORS", "entry": 920, "target": 1104, "stop_loss": 828, "rank": 2}
     ]
     today = datetime.now().strftime("%d-%b-%Y")
-    message = f"*📊 Top Quant Picks - {today}"
+    today = datetime.now().strftime("%d-%b-%Y")
+message = f"<b>📊 Top Quant Picks - {today}</b>\n\n"
+for stock in picks:
+    message += f"<b>Rank #{stock['rank']}</b>: {stock['symbol']}<br>"
+    message += f"Entry: {stock['entry']}<br>"
+    message += f"Target: {stock['target']}<br>"
+    message += f"Stop Loss: {stock['stop_loss']}<br>"
+    message += f"Exit by: {(datetime.now() + timedelta(days=30)).strftime('%d-%b-%Y')}<br><br>"
 
-    for stock in picks:
-        message += (
-            f"*🏅 Rank #{stock['rank']}*: `{stock['symbol']}`\n"
-            f"➤ Entry: ₹{stock['entry']}\n"
-            f"🎯 Target: ₹{stock['target']}\n"
-            f"🛡 Stop Loss: ₹{stock['stop_loss']}\n"
-            f"📅 Exit by: {(datetime.now() + timedelta(days=30)).strftime('%d-%b-%Y')}\n\n"
-        )
-    send_telegram(message)
+send_telegram(message)
+
