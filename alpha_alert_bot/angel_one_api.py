@@ -28,7 +28,6 @@ def start_websocket():
     today = datetime.now().strftime("%d-%b-%Y")
     message = f"*📊 Top Quant Picks - {today}"
 
-"
     for stock in picks:
         message += (
             f"*🏅 Rank #{stock['rank']}*: `{stock['symbol']}`\n"
