@@ -1,9 +1,8 @@
 import os
 import requests
 import json
-import pandas as pd
 from datetime import datetime, timedelta
-from instrument_parser import get_token_for_symbols
+from nse_token_data import nse_tokens
 
 def send_telegram(message):
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -20,15 +19,25 @@ def send_telegram(message):
     except Exception as e:
         print("Telegram Error:", e)
 
-def start_websocket():
-    # Load all NSE symbols from file
-    df = pd.read_csv("nse_tokens.csv")
-    final_top_picks = df["symbol"].tolist()
+def get_token_for_symbols(symbols):
+    token_map = {entry["symbol"]: entry["token"] for entry in nse_tokens}
+    result = []
+    for i, symbol in enumerate(symbols[:10], start=1):  # limit to top 10 for now
+        if symbol in token_map:
+            result.append({
+                "rank": i,
+                "symbol": symbol,
+                "entry": "Live Price TBD",
+                "target": "Target TBD",
+                "stop_loss": "SL TBD"
+            })
+    return result
 
-    # Convert to tokens
+def start_websocket():
+    final_top_picks = [entry["symbol"] for entry in nse_tokens]
+
     picks = get_token_for_symbols(final_top_picks)
 
-    # Format message
     today = datetime.now().strftime("%d-%b-%Y")
     message = f"<b>Top Quant Picks – {today}</b>\n\n"
 
