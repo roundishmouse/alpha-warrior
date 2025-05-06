@@ -1,4 +1,3 @@
 flask
-SmartApi
 pandas
-pycryptodome
+
