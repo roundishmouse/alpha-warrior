@@ -17,7 +17,7 @@ def angel_login():
     try:
         totp = generate_totp(TOTP_SECRET)
         session = obj.generateSession(CLIENT_CODE, PIN, totp)
-        print("✅ Login successful!")
+        print("✅ Login successful")
         print("Token:", session["data"]["jwtToken"])
         return session["data"]
     except Exception as e:
@@ -26,8 +26,4 @@ def angel_login():
         return {}
 
 def start_websocket():
-    session_data = angel_login()
-    if not isinstance(session_data, dict) or "jwtToken" not in session_data:
-        print("❌ Login failed or invalid token structure")
-        return
-    # You can expand this with WebSocket logic after successful login
+    angel_login()
