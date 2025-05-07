@@ -1,7 +1,7 @@
 import os
 import requests
 from datetime import datetime
-from smartapi import SmartConnect
+from smartapi.smartconnect import SmartConnect
 
 # Send message to Telegram
 def send_telegram(message):
