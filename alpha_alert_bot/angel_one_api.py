@@ -1,6 +1,6 @@
 import os
 import requests
-from smartapi.smartConnect import SmartConnect
+from smartapi.smartconnect import SmartConnect
 from datetime import datetime
 import json
 
