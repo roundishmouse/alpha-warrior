@@ -22,7 +22,7 @@ def send_telegram(message):
         print("Telegram Error:", e)
 
 # Get top 2 stocks (make sure nse_tokens is defined globally or passed)
-def get_top_stocks():
+def get_top_stocks(nse_tokens):
     top_symbols = [entry["symbol"] for entry in nse_tokens[:2]]
     return top_symbols
 
@@ -39,7 +39,7 @@ def start_websocket():
     data = obj.generateSession(client_code, pin, totp)
     jwt_token = data["data"]["jwtToken"]
 
-    symbols = get_top_stocks()
+    symbols = get_top_stocks(nse_tokens)
     token_map = {entry["symbol"]: entry["token"] for entry in nse_tokens}
     message = f"<b>Quant Picks {datetime.now().strftime('%d-%b-%Y')}</b>\n\n"
 
