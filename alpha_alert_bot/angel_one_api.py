@@ -49,7 +49,8 @@ def start_websocket():
 
     for i, symbol in enumerate(symbols, start=1):
         token = token_map[symbol]
-        ltp_data = obj.ltpData("NSE", symbol, token)
+       ltp_data = obj.get_ltp(exchange='NSE', tradingsymbol=symbol, symboltoken=token)
+
         ltp = ltp_data["data"]["ltp"]
         target = round(ltp * 1.2, 2)
         stop_loss = round(ltp * 0.9, 2)
