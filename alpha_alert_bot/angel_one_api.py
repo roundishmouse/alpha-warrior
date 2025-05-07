@@ -1,7 +1,8 @@
 import os
 import requests
+from smartapi.smartConnect import SmartConnect
 from datetime import datetime
-from smartapi.smartconnect import SmartConnect
+import json
 
 # Send message to Telegram
 def send_telegram(message):
@@ -21,12 +22,12 @@ def send_telegram(message):
     except Exception as e:
         print("Telegram Error:", e)
 
-# Get top 2 stocks (make sure nse_tokens is defined globally or passed)
+# Get top 2 stocks
 def get_top_stocks(nse_tokens):
     top_symbols = [entry["symbol"] for entry in nse_tokens[:2]]
     return top_symbols
 
-# Start WebSocket and send alerts
+# Start websocket and send alerts
 def start_websocket():
     print("Sending login request...")
 
@@ -39,7 +40,11 @@ def start_websocket():
     data = obj.generateSession(client_code, pin, totp)
     jwt_token = data["data"]["jwtToken"]
 
+    # Get token list from environment variable or replace with actual logic
+    nse_tokens = json.loads(os.environ.get("NSE_TOKENS", "[]"))
+
     symbols = get_top_stocks(nse_tokens)
+
     token_map = {entry["symbol"]: entry["token"] for entry in nse_tokens}
     message = f"<b>Quant Picks {datetime.now().strftime('%d-%b-%Y')}</b>\n\n"
 
