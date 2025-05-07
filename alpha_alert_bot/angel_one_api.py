@@ -1,9 +1,7 @@
 import os
-import json
 import requests
-from datetime import datetime, timedelta
-from nse_token_data import nse_tokens
-from smartapi.smartconnect import SmartConnect
+from datetime import datetime
+from smartapi import SmartConnect
 
 # Send message to Telegram
 def send_telegram(message):
@@ -23,12 +21,12 @@ def send_telegram(message):
     except Exception as e:
         print("Telegram Error:", e)
 
-# Get top 2 stocks (example filter: top 2 from Nifty 100)
+# Get top 2 stocks (make sure nse_tokens is defined globally or passed)
 def get_top_stocks():
-    top_symbols = [entry['symbol'] for entry in nse_tokens[:2]]
+    top_symbols = [entry["symbol"] for entry in nse_tokens[:2]]
     return top_symbols
 
-# Start websocket and send alerts
+# Start WebSocket and send alerts
 def start_websocket():
     print("Sending login request...")
 
@@ -41,16 +39,13 @@ def start_websocket():
     data = obj.generateSession(client_code, pin, totp)
     jwt_token = data["data"]["jwtToken"]
 
-    # Get top 2 stock symbols
     symbols = get_top_stocks()
-
     token_map = {entry["symbol"]: entry["token"] for entry in nse_tokens}
     message = f"<b>Quant Picks {datetime.now().strftime('%d-%b-%Y')}</b>\n\n"
 
     for i, symbol in enumerate(symbols, start=1):
         token = token_map[symbol]
-       ltp_data = obj.get_ltp(exchange='NSE', tradingsymbol=symbol, symboltoken=token)
-
+        ltp_data = obj.get_ltp(exchange="NSE", tradingsymbol=symbol, symboltoken=token)
         ltp = ltp_data["data"]["ltp"]
         target = round(ltp * 1.2, 2)
         stop_loss = round(ltp * 0.9, 2)
