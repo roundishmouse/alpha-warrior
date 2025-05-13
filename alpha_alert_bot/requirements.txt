@@ -2,4 +2,4 @@ flask
 pandas
 requests
 smartapi-python
-
+yfinance
