@@ -1,5 +1,6 @@
 import os
 import requests
+import yfinance as yf
 from smartapi.smartconnect import SmartConnect
 from datetime import datetime
 import json
@@ -20,7 +21,36 @@ def send_telegram(message):
     except Exception as e:
         print("Telegram Error:", e)
 
-# CANSLIM + Minervini style filter
+# Calculate real technicals using yfinance data
+def get_real_indicators(symbol):
+    try:
+        yf_symbol = symbol + ".NS"
+        data = yf.download(yf_symbol, period="250d", interval="1d", progress=False)
+        if data.empty or len(data) < 200:
+            return None
+
+        closes = data["Close"]
+        volume = data["Volume"]
+        ltp = closes.iloc[-1]
+        ma50 = closes[-50:].mean()
+        ma150 = closes[-150:].mean()
+        ma200 = closes[-200:].mean()
+        week52_high = closes.max()
+        avg_volume = volume[-20:].mean()
+
+        return {
+            "ltp": ltp,
+            "ma50": ma50,
+            "ma150": ma150,
+            "ma200": ma200,
+            "week52_high": week52_high,
+            "avg_volume": avg_volume
+        }
+    except Exception as e:
+        print(f"Error fetching data for {symbol}: {e}")
+        return None
+
+# Final stock ranking logic
 def get_top_stocks(nse_tokens, obj):
     qualified = []
 
@@ -28,37 +58,30 @@ def get_top_stocks(nse_tokens, obj):
         symbol = entry["symbol"]
         token = entry["token"]
 
+        indicators = get_real_indicators(symbol)
+        if not indicators:
+            continue
+
         try:
             ltp_data = obj.get_ltp(exchange="NSE", tradingsymbol=symbol, symboltoken=token)
             ltp = ltp_data["data"]["ltp"]
-
-            # Simulated MAs for Minervini filter (placeholders)
-            ma50 = ltp * 0.95
-            ma150 = ltp * 0.90
-            ma200 = ltp * 0.88
-            week52_high = ltp * 1.05
-            avg_volume = 100000
-            current_volume = 120000
-
-            if (
-                ma50 > ma150 > ma200 and
-                ltp > ma50 and
-                ltp > ma150 and
-                ltp > ma200 and
-                ltp >= 0.9 * week52_high and
-                current_volume > avg_volume * 1.1
-            ):
-                score = (ltp / ma200) + (current_volume / avg_volume)
-                qualified.append((symbol, token, ltp, score))
         except:
             continue
+
+        if (
+            indicators["ma50"] > indicators["ma150"] > indicators["ma200"] and
+            indicators["ltp"] > indicators["ma50"] and
+            indicators["ltp"] >= 0.9 * indicators["week52_high"]
+        ):
+            score = (indicators["ltp"] / indicators["ma200"])
+            qualified.append((symbol, token, indicators["ltp"], score))
 
     qualified.sort(key=lambda x: x[3], reverse=True)
     return qualified[:2]
 
-# Main bot logic
+# Main bot trigger
 def start_websocket():
-    print("Starting bot with CANSLIM + Minervini filters...")
+    print("Running Alpha Warrior with real filters...")
 
     api_key = os.environ.get("SMARTAPI_API_KEY")
     client_code = os.environ.get("SMARTAPI_CLIENT_CODE")
@@ -72,7 +95,6 @@ def start_websocket():
     top_stocks = get_top_stocks(nse_tokens, obj)
 
     message = f"<b>Quant Picks {datetime.now().strftime('%d-%b-%Y')}</b>\n\n"
-
     for i, (symbol, token, ltp, score) in enumerate(top_stocks, start=1):
         target = round(ltp * 1.2, 2)
         stop_loss = round(ltp * 0.9, 2)
@@ -81,4 +103,4 @@ def start_websocket():
     if top_stocks:
         send_telegram(message)
     else:
-        send_telegram("No stocks matched the CANSLIM + Minervini criteria today.")
+        send_telegram("No stocks matched the CANSLIM + Minervini filters today.")
