@@ -1,7 +1,7 @@
 import os
 import requests
 import pyotp
-from smartapi-python.smartconnect import SmartConnect
+from smartapi_python.smartConnect import SmartConnect
 from datetime import datetime
 
 # Telegram alert function
