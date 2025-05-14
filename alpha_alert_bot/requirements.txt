@@ -1,7 +1,7 @@
 flask
 pandas
 requests
-smartapi-python==1.0.6
+git+https://github.com/angel-one/smartapi-python.git
 yfinance
 selenium
 twisted
