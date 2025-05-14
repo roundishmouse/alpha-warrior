@@ -82,7 +82,7 @@ def start_websocket():
     jwt_token = data["data"]["jwtToken"]
 
     # Get tokens from env or fallback
-    nse_tokens = json.loads(os.environ.get("NSE_TOKENS", "[]"))
+    from nse_token_data import nse_tokens
     symbols = get_top_stocks(nse_tokens, obj)
 
     # Log stock scan info
