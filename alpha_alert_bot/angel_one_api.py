@@ -78,7 +78,7 @@ def start_websocket():
     totp = os.environ.get("SMARTAPI_TOTP")
 
     obj = SmartConnect(api_key)
-    data = obj.generateSession(client_code, pin, totp)
+    data = obj.generateSession(client_code, pin)
     jwt_token = data["data"]["jwtToken"]
 
     # Get tokens from env or fallback
