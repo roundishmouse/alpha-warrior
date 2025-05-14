@@ -1,6 +1,6 @@
 flask
 pandas
 requests
-smartapi-python
+git+https://github.com/angel-one/smartapi-python.git
 yfinance
 selenium
