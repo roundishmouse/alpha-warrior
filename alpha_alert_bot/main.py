@@ -1,14 +1,13 @@
+
 import os
-import sys
 import time
 import pandas as pd
 from flask import Flask
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from smartapi.smartConnect import SmartConnect
+from smartapi.smartconnect import SmartConnect
 
-# Flask app
 app = Flask(__name__)
 
 @app.route("/")
@@ -22,7 +21,6 @@ def trigger_alert():
     return "Triggered alerts and updated CANSLIM metrics."
 
 def run_canslim_scraper():
-    # NSE tokens inline (you can keep more stocks later)
     nse_tokens = [
         {'symbol': 'ARE&M'}, {'symbol': 'FACT'}, {'symbol': 'FEDERALBNK'},
         {'symbol': 'RADHIKAWE'}, {'symbol': 'STEELCITY'}, {'symbol': 'ARVSMART'},
@@ -30,18 +28,19 @@ def run_canslim_scraper():
         {'symbol': 'KRBL'}
     ]
 
-    options = webdriver.ChromeOptions()
+    options = Options()
+    options.binary_location = "/usr/bin/google-chrome"
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    driver = webdriver.Chrome(service=Service("chromedriver.exe"), options=options)
+
+    driver = webdriver.Chrome(options=options)
 
     scraped_data = []
 
     for stock in nse_tokens:
         symbol = stock['symbol']
         url = f"https://www.screener.in/company/{symbol}/"
-
         driver.get(url)
         time.sleep(3)
 
