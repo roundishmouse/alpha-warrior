@@ -78,17 +78,26 @@ def start_websocket():
     totp = os.environ.get("SMARTAPI_TOTP")
 
     obj = SmartConnect(api_key)
-    obj.generateSession(client_code, pin, totp)
+    data = obj.generateSession(client_code, pin, totp)
+    jwt_token = data["data"]["jwtToken"]
 
+    # Get tokens from env or fallback
     nse_tokens = json.loads(os.environ.get("NSE_TOKENS", "[]"))
     symbols = get_top_stocks(nse_tokens, obj)
 
-    is_fallback = len(symbols) == 0 or len(symbols[0]) == 3
-    message = f"<b>{'Relaxed' if is_fallback else 'Quant'} Picks {datetime.now().strftime('%d-%b-%Y')}:</b>\n\n"
+    # Log stock scan info
+    print(f"Total stocks scanned: {len(nse_tokens)}")
+    print(f"Stocks qualified under strict filter: {len(symbols)}")
+
+    is_fallback = len(symbols) == 0 or len(symbols[0]) == 0
+
+    # Start message
+    message = f"<b>{'Relaxed' if is_fallback else 'Quant'} Picks {datetime.now().strftime('%d-%b-%Y')}:</b>\n"
+    message += f"Scanned: {len(nse_tokens)} | Selected: {len(symbols)}\n\n"
 
     for i, stock in enumerate(symbols, start=1):
         symbol, token, ltp = stock[:3]
-        message += f"<b>#{i} {symbol}</b>\nLTP: ₹{ltp}\n"
+        message += f"<b>#{i} {symbol}</b>\nLTP: {ltp}\n"
         if not is_fallback:
             message += f"Score: {round(stock[3], 2)}\n"
         message += "\n"
