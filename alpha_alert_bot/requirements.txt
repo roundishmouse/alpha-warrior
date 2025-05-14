@@ -1,6 +1,6 @@
 flask
 pandas
 requests
-smartapi-python
+smartapi
 yfinance
 selenium
