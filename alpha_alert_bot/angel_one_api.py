@@ -75,7 +75,6 @@ def start_websocket():
     api_key = os.environ.get("SMARTAPI_API_KEY")
     client_code = os.environ.get("SMARTAPI_CLIENT_CODE")
     pin = os.environ.get("SMARTAPI_PIN")
-    totp = os.environ.get("SMARTAPI_TOTP")
 
     obj = SmartConnect(api_key)
     data = obj.generateSession(client_code, pin)
