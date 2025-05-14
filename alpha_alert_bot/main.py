@@ -1,15 +1,13 @@
 import os
 import sys
-import csv
-import time
 import pandas as pd
 from flask import Flask
+from angel_one_api import start_websocket
+from nse_token_data import nse_tokens
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from angel_one_api import start_websocket
-from nse_token_data import nse_tokens
 
 app = Flask(__name__)
 
@@ -41,18 +39,14 @@ def run_canslim_scraper():
         symbol = token["symbol"]
         url = f"https://www.screener.in/company/{symbol}/consolidated/"
         driver.get(url)
-        time.sleep(2)
-
         try:
             roe = driver.find_element(By.XPATH, '//*[@id="top-ratios"]/li[8]/span[2]/span').text
         except:
             roe = "N/A"
-
         try:
             eps_growth = driver.find_element(By.XPATH, '//*[@id="profit-loss"]/div[4]/table[2]/tbody/tr[4]/td[2]').text
         except:
             eps_growth = "N/A"
-
         try:
             promoter = driver.find_element(By.XPATH, '//*[@id="quarterly-shp"]/div/table/tbody/tr[1]/td[13]').text
         except:
@@ -66,7 +60,6 @@ def run_canslim_scraper():
         })
 
     driver.quit()
-
     df = pd.DataFrame(data)
     df.to_csv("screener_data.csv", index=False)
 
