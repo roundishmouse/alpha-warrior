@@ -5,3 +5,4 @@ smartapi-python==1.0.6
 yfinance
 selenium
 twisted
+pyOpenSSL
