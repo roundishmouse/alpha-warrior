@@ -4,4 +4,4 @@ requests
 smartapi
 yfinance
 selenium
-pycryptodome
+pycryptodomex
