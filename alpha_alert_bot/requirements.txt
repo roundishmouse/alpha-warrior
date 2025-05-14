@@ -1,6 +1,6 @@
 flask
 pandas
 requests
-smartapi-python
+smartapi-python==1.0.6
 yfinance
 selenium
