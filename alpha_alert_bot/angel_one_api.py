@@ -1,7 +1,7 @@
 import os
 import requests
 import pyotp
-from smartapi.smartconnect import SmartConnect
+from smartapi.smartConnect import SmartConnect
 from datetime import datetime
 import json
 
