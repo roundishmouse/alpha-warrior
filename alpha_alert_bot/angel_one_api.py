@@ -83,7 +83,7 @@ def start_websocket():
     nse_tokens = json.loads(os.environ.get("NSE_TOKENS", "[]"))
     symbols = get_top_stocks(nse_tokens, obj)
 
-    is_fallback = len(symbols[0]) == 3
+is_fallback = len(symbols) == 0 or len(symbols[0]) == 3
     message = f"<b>{'Relaxed' if is_fallback else 'Quant'} Picks {datetime.now().strftime('%d-%b-%Y')}:</b>\n\n"
 
     for i, stock in enumerate(symbols, start=1):
