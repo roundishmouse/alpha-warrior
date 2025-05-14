@@ -78,7 +78,7 @@ def start_websocket():
 
     obj = SmartConnect(api_key)
     data = obj.generateSession(client_code, pin)
-    jwt_token = data["data"]["jwtToken"]
+    jwtToken = data.get("data", {}).get("jwtToken", "N/A")
 
     # Get tokens from env or fallback
     from nse_token_data import nse_tokens
