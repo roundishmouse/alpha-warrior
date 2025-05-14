@@ -21,12 +21,8 @@ def trigger_alert():
     return "Triggered alerts and updated CANSLIM metrics."
 
 def run_canslim_scraper():
-    nse_tokens = [
-        {'symbol': 'ARE&M'}, {'symbol': 'FACT'}, {'symbol': 'FEDERALBNK'},
-        {'symbol': 'RADHIKAWE'}, {'symbol': 'STEELCITY'}, {'symbol': 'ARVSMART'},
-        {'symbol': 'RAMRAT'}, {'symbol': 'POWERMECH'}, {'symbol': 'MNC'},
-        {'symbol': 'KRBL'}
-    ]
+ from nse_token_data import nse_tokens  # Make sure your nse_token_data.py has 'symbol' keys
+
 
     options = Options()
     options.binary_location = "/usr/bin/google-chrome"
