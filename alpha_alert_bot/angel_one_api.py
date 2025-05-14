@@ -1,9 +1,8 @@
 import os
 import requests
+import pyotp
 from smartapi.smartConnect import SmartConnect
 from datetime import datetime
-import json
-import time
 
 # Telegram alert function
 def send_telegram(message):
@@ -20,7 +19,7 @@ def send_telegram(message):
     except Exception as e:
         print("Telegram Error:", e)
 
-# Stock filter with fallback
+# Stock filter logic (simplified)
 def get_top_stocks(nse_tokens, obj):
     qualified = []
 
@@ -31,74 +30,41 @@ def get_top_stocks(nse_tokens, obj):
         try:
             ltp_data = obj.get_ltp(exchange="NSE", tradingsymbol=symbol, symboltoken=token)
             ltp = ltp_data["data"]["ltp"]
-
-            ma50 = ltp * 0.95
-            ma150 = ltp * 0.90
-            ma200 = ltp * 0.88
-            week52_high = ltp * 1.05
-            avg_volume = 100000
-            current_volume = 120000
-
-            if (
-                ma50 > ma150 > ma200 and
-                ltp > ma50 and ltp > ma150 and ltp > ma200 and
-                ltp >= 0.9 * week52_high and
-                current_volume >= avg_volume * 1.1
-            ):
-                score = (ltp / ma200) * (current_volume / avg_volume)
-                qualified.append((symbol, token, ltp, score))
-
-        except Exception as e:
+            score = ltp  # simplified score
+            qualified.append((symbol, token, ltp, score))
+        except Exception:
             continue
-
-    if not qualified:
-        fallback = []
-        for entry in nse_tokens[:20]:
-            try:
-                symbol = entry["symbol"]
-                token = entry["token"]
-                ltp_data = obj.get_ltp(exchange="NSE", tradingsymbol=symbol, symboltoken=token)
-                ltp = ltp_data["data"]["ltp"]
-                fallback.append((symbol, token, ltp))
-            except:
-                continue
-        fallback.sort(key=lambda x: -x[2])
-        return fallback[:2]
 
     qualified.sort(key=lambda x: -x[3])
     return qualified[:2]
 
 # Main bot trigger
 def start_websocket():
-    print("Running Alpha Warrior with fallback logic...")
+    print("Running Alpha Warrior with SmartAPI + TOTP...")
 
     api_key = os.environ.get("SMARTAPI_API_KEY")
     client_code = os.environ.get("SMARTAPI_CLIENT_CODE")
     pin = os.environ.get("SMARTAPI_PIN")
+    totp_secret = os.environ.get("SMARTAPI_TOTP")
 
+    # Generate TOTP dynamically
+    totp = pyotp.TOTP(totp_secret).now()
     obj = SmartConnect(api_key)
-    data = obj.generateSession(client_code, pin)
-    jwtToken = data.get("data", {}).get("jwtToken", "N/A")
 
-    # Get tokens from env or fallback
+    try:
+        data = obj.generateSession(client_code, pin, totp)
+        jwtToken = data.get("data", {}).get("jwtToken")
+        print("Login successful. JWT:", jwtToken)
+    except Exception as e:
+        print("Login failed:", e)
+        return
+
     from nse_token_data import nse_tokens
-    symbols = get_top_stocks(nse_tokens, obj)
+    stocks = get_top_stocks(nse_tokens, obj)
 
-    # Log stock scan info
-    print(f"Total stocks scanned: {len(nse_tokens)}")
-    print(f"Stocks qualified under strict filter: {len(symbols)}")
-
-    is_fallback = len(symbols) == 0 or len(symbols[0]) == 0
-
-    # Start message
-    message = f"<b>{'Relaxed' if is_fallback else 'Quant'} Picks {datetime.now().strftime('%d-%b-%Y')}:</b>\n"
-    message += f"Scanned: {len(nse_tokens)} | Selected: {len(symbols)}\n\n"
-
-    for i, stock in enumerate(symbols, start=1):
-        symbol, token, ltp = stock[:3]
-        message += f"<b>#{i} {symbol}</b>\nLTP: {ltp}\n"
-        if not is_fallback:
-            message += f"Score: {round(stock[3], 2)}\n"
-        message += "\n"
+    message = f"<b>Top Picks {datetime.now().strftime('%d-%b-%Y')}:</b>\n"
+    for i, stock in enumerate(stocks, 1):
+        symbol, token, ltp, score = stock
+        message += f"<b>#{i} {symbol}</b>\nLTP: {ltp}\nScore: {round(score, 2)}\n\n"
 
     send_telegram(message)
