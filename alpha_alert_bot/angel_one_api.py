@@ -1,7 +1,7 @@
 import os
 import requests
 import pyotp
-from alpha_alert_bot.smartapi.smartconnect import SmartConnect
+from smartapi.smartconnect import SmartConnect
 from datetime import datetime
 import json
 
