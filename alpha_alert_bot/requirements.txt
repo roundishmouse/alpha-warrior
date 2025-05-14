@@ -6,3 +6,4 @@ yfinance
 selenium
 twisted
 pyOpenSSL
+autobahn
