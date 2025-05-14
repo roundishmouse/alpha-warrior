@@ -3,3 +3,4 @@ pandas
 requests
 smartapi-python
 yfinance
+selenium
