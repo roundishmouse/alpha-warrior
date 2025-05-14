@@ -1,7 +1,7 @@
 flask
 pandas
 requests
-git+https://github.com/angel-one/smartapi-python.git@main#egg=smartapi.smartConnect
+git+https://github.com/angel-one/smartapi-python.git@main#egg=smartapi-python
 yfinance
 selenium
 twisted
