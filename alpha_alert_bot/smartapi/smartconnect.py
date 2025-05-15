@@ -14,6 +14,7 @@ class SmartConnect:
     def generateSession(self, client_code, pin, totp_secret):
         self.client_code = client_code
         totp = pyotp.TOTP(totp_secret).now()
+        print("TOTP being used by bot:", totp)
 
         payload = {
             "clientcode": client_code,
