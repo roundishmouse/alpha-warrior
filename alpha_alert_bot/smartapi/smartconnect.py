@@ -16,7 +16,9 @@ class SmartConnect:
         self.client_code = client_code
         now = datetime.datetime.utcnow()
         totp = pyotp.TOTP(totp_secret)
-        generated_totp = totp.at(now)
+        timestamp = int(datetime.datetime.utcnow().timestamp())
+        generated_totp = totp.at(timestamp)
+
 
         print("System Time (UTC):", now)
         print("TOTP being used by bot:", generated_totp)
