@@ -2,7 +2,7 @@ import pyotp
 import time
 import requests
 import datetime
-
+import calendar
 
 class SmartConnect:
     def __init__(self, api_key):
@@ -15,35 +15,37 @@ class SmartConnect:
 
     def generateSession(self, client_code, pin, totp_secret):
         self.client_code = client_code
+
+        # Get exact UTC time and convert to timestamp
         now = datetime.datetime.utcnow()
+        timestamp = calendar.timegm(now.timetuple())
+
         print("System Time (UTC):", now)
 
-        timestamp = int(now.timestamp())
+        # Generate TOTP using the injected timestamp
         totp = pyotp.TOTP(totp_secret)
+        generated_totp = totp.at(timestamp)
+        print("TOTP being used by bot:", generated_totp)
 
-        for drift in [0, -30, 30]:
-            adjusted_time = timestamp + drift
-            generated_totp = totp.at(adjusted_time)
-            print(f"TOTP used with drift {drift} sec:", generated_totp)
+        payload = {
+            "clientcode": client_code,
+            "password": pin,
+            "totp": generated_totp
+        }
 
-            payload = {
-                "clientcode": client_code,
-                "password": pin,
-                "totp": generated_totp
-            }
+        headers = {
+            "Content-Type": "application/json",
+            "X-Api-Key": self.api_key
+        }
 
-            headers = {
-                "Content-Type": "application/json",
-                "X-Api-Key": self.api_key
-            }
+        url = "https://apiconnect.angelbroking.com/rest/auth/angelbroking/user/v1/loginByPassword"
+        response = requests.post(url, json=payload, headers=headers)
+        data = response.json()
+        print(">>> RESPONSE:", response.status_code, data)
 
-            url = "https://apiconnect.angelbroking.com/rest/auth/angelbroking/user/v1/loginByPassword"
-            response = requests.post(url, json=payload, headers=headers)
-            data = response.json()
-            print(f"Drift {drift} sec => RESPONSE:", response.status_code, data)
-
-            if response.status_code == 200 and data.get("status"):
-                self.jwt_token = data["data"]["jwtToken"]
-                self.feed_token = data["data"]["feedToken"]
-                self.refresh_token = data["data"]["refreshToken"]
-                break
+        if response.status_code == 200 and data.get("status"):
+            self.jwt_token = data["data"]["jwtToken"]
+            self.feed_token = data["data"]["feedToken"]
+            self.refresh_token = data["data"]["refreshToken"]
+        else:
+            print("Login failed.")
