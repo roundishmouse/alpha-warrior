@@ -64,7 +64,8 @@ def start_websocket():
 
     try:
         obj = SmartConnect(api_key)
-        data = obj.generateSession(api_key=api_key, client_code=client_code, password=pin, totp=totp)
+        data = obj.generateSession(client_code, pin, totp_secret)
+
         jwtToken = obj.jwt_token
         print("Login successful. JWT:", jwtToken)
     except Exception as e:
