@@ -1,36 +1,52 @@
-def start_websocket():
-    print("Running Alpha Warrior with SmartAPI + TOTP...")
+import requests
+import pyotp
 
-    api_key = os.environ.get("SMARTAPI_API_KEY")
-    client_code = os.environ.get("SMARTAPI_CLIENT_CODE")
-    pin = os.environ.get("SMARTAPI_PIN")
-    totp_secret = os.environ.get("SMARTAPI_TOTP")
+class SmartConnect:
+    def __init__(self, api_key):
+        self.api_key = api_key
+        self.jwt_token = None
+        self.feed_token = None
+        self.refresh_token = None
 
-    # Generate TOTP dynamically
-    totp = pyotp.TOTP(totp_secret).now()
+    def generateSession(self, client_code, pin, totp_secret):
+        totp = pyotp.TOTP(totp_secret).now()
+        payload = {
+            "clientcode": client_code,
+            "pin": pin,
+            "totp": totp,
+        }
 
-    try:
-        obj = SmartConnect()
-        data = obj.generateSession(api_key=api_key, client_code=client_code, password=pin, totp=totp)
-        jwtToken = obj.jwt_token
-        print("Login successful. JWT:", jwtToken)
-    except Exception as e:
-        print("Login failed:", e)
-        return
+        headers = {
+            "Content-Type": "application/json",
+            "X-Api-Key": self.api_key
+        }
 
-    from nse_token_data import nse_tokens
-    symbols = get_top_stocks(nse_tokens, obj)
+        url = "https://apiconnect.angelbroking.com/rest/auth/angelbroking/user/v1/loginByPassword"
 
-    is_fallback = len(symbols) == 0 or len(symbols[0]) == 0
+        response = requests.post(url, json=payload, headers=headers)
+        result = response.json()
 
-    message = f"<b>{'Relaxed' if is_fallback else 'Quant'} Picks {datetime.now().strftime('%d-%b-%Y')}:</b>\n"
-    message += f"Scanned: {len(nse_tokens)} | Selected: {len(symbols)}\n\n"
+        if result["status"] and "data" in result:
+            data = result["data"]
+            self.jwt_token = data["jwtToken"]
+            self.feed_token = data["feedToken"]
+            self.refresh_token = data["refreshToken"]
+            return result
+        else:
+            raise Exception(f"Login failed: {result}")
 
-    for i, stock in enumerate(symbols, start=1):
-        symbol, token, ltp = stock[:3]
-        message += f"<b>#{i} {symbol}</b>\nLTP: {ltp}\n"
-        if not is_fallback:
-            message += f"Score: {round(stock[3], 2)}\n"
-        message += "\n"
-
-    send_telegram(message)
+    def get_ltp(self, exchange, tradingsymbol, symboltoken):
+        url = "https://apiconnect.angelbroking.com/rest/market/v2/ltpData"
+        headers = {
+            "Authorization": f"Bearer {self.jwt_token}",
+            "X-Api-Key": self.api_key,
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "mode": "LTP",
+            "exchange": exchange,
+            "tradingsymbol": tradingsymbol,
+            "symboltoken": symboltoken
+        }
+        response = requests.post(url, json=payload, headers=headers)
+        return response.json()
