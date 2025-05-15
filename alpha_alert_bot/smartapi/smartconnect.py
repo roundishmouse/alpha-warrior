@@ -4,7 +4,7 @@ import requests
 
 class SmartConnect:
     def __init__(self, api_key):
-        self.api_key = api_key
+        self.api_key = api_key.strip()
         self.jwt_token = None
         self.feed_token = None
         self.refresh_token = None
@@ -27,12 +27,10 @@ class SmartConnect:
         }
 
         url = "https://apiconnect.angelbroking.com/rest/auth/angelbroking/user/v1/loginByPassword"
-        print(">>> PAYLOAD SENDING:", payload)
-        print(">>> HEADERS SENDING:", headers)
-
+        
         response = requests.post(url, json=payload, headers=headers)
         data = response.json()
-        print(">>> RESPONSE:", response.status_code, data)
+        
 
         if response.status_code == 200 and data.get("status"):
             self.jwt_token = data["data"]["jwtToken"]
