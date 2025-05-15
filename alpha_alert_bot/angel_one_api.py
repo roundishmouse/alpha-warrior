@@ -63,7 +63,7 @@ def start_websocket():
     totp = pyotp.TOTP(totp_secret).now()
 
     try:
-        obj = SmartConnect()
+        obj = SmartConnect(api_key)
         data = obj.generateSession(api_key=api_key, client_code=client_code, password=pin, totp=totp)
         jwtToken = obj.jwt_token
         print("Login successful. JWT:", jwtToken)
