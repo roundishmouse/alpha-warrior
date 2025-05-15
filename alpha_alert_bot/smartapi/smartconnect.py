@@ -1,6 +1,8 @@
 import pyotp
 import time
 import requests
+import datetime
+
 
 class SmartConnect:
     def __init__(self, api_key):
@@ -13,8 +15,16 @@ class SmartConnect:
 
     def generateSession(self, client_code, pin, totp_secret):
         self.client_code = client_code
-        totp = pyotp.TOTP(totp_secret).now()
-        print("TOTP being used by bot:", totp)
+        now = datetime.datetime.now()
+        utc = datetime.datetime.utcnow()
+        print("System Time (Local):", now)
+        print("System Time (UTC):", utc)
+
+        totp = pyotp.TOTP(totp_secret)
+        print("TOTP being used by bot:", totp.now())
+
+
+        
 
         payload = {
             "clientcode": client_code,
