@@ -29,7 +29,7 @@ class SmartConnect:
         payload = {
             "clientcode": client_code,
             "password": pin,
-            "totp": totp
+            "totp": totp.now()
         }
 
         headers = {
