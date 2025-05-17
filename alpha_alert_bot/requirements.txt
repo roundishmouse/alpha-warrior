@@ -8,5 +8,5 @@ pyOpenSSL
 autobahn
 pyotp
 ntplib
--e git+https://github.com/angel-one/smartapi-python.git@7c2a705#egg=smartapi-python
+-e git+https://github.com/angel-one/smartapi-python.git@72ca705#egg=smartapi-python
 service_identity
