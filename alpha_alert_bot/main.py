@@ -15,8 +15,8 @@ totp = pyotp.TOTP(totp_secret).now()
 print("Generated TOTP:", totp)
 
 # Step 2: Create session
-obj = SmartConnect(api_key=api_key)
-data = obj.generateSession(clientCode=client_code, password=password, totp=totp)
+obj = SmartConnect(api_key)
+data = obj.generateSession(client_code, password, totp)
 
 # Step 3: Extract token
 auth_token = data['data']['jwtToken']
