@@ -17,7 +17,7 @@ obj = SmartConnect(api_key)
 
 # Perform login with positional arguments
 try:
-    data = obj.generateSession(client_code, password, totp)
+    data = obj.generateSession(clientCode=client_code, password=password, totp=totp)
     print("Login successful!")
     print("JWT Token:", data['data']['jwtToken'])
 except Exception as e:
