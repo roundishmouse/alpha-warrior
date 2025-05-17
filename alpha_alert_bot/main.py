@@ -1,68 +1,26 @@
+
+from smartapi import SmartConnect
+import pyotp
+import requests
 import os
-import sys
-import pandas as pd
-from flask import Flask
-from angel_one_api import start_websocket
-from nse_token_data import nse_tokens
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
+from datetime import datetime
 
-app = Flask(__name__)
+api_key = "CTtSQeSy"
+client_code = "A505883"
+password = "6130"
+totp_secret = "3NO6IXIOTSDBEROL7QNWETWDEY"
 
-@app.route("/")
-def home():
-    return "Alpha Warrior Bot with CANSLIM is Live!"
+# Step 1: Generate TOTP
+totp = pyotp.TOTP(totp_secret).now()
+print("Generated TOTP:", totp)
 
-@app.route("/callback")
-def callback():
-    return "Callback received from SmartAPI."
+# Step 2: Create session
+obj = SmartConnect(api_key=api_key)
+data = obj.generateSession(clientCode=client_code, password=password, totp=totp)
 
-@app.route("/trigger-alert")
-def trigger_alert():
-    run_canslim_scraper()
-    start_websocket()
-    return "Triggered alerts and updated CANSLIM metrics."
+# Step 3: Extract token
+auth_token = data['data']['jwtToken']
+print("Login Success. JWT Token:", auth_token)
 
-def run_canslim_scraper():
-    options = Options()
-    options.binary_location = "/usr/bin/google-chrome"
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-
-    driver = webdriver.Chrome(service=Service("chromedriver"), options=options)
-    data = []
-
-    for token in nse_tokens:
-        symbol = token["symbol"]
-        url = f"https://www.screener.in/company/{symbol}/consolidated/"
-        driver.get(url)
-        try:
-            roe = driver.find_element(By.XPATH, '//*[@id="top-ratios"]/li[8]/span[2]/span').text
-        except:
-            roe = "N/A"
-        try:
-            eps_growth = driver.find_element(By.XPATH, '//*[@id="profit-loss"]/div[4]/table[2]/tbody/tr[4]/td[2]').text
-        except:
-            eps_growth = "N/A"
-        try:
-            promoter = driver.find_element(By.XPATH, '//*[@id="quarterly-shp"]/div/table/tbody/tr[1]/td[13]').text
-        except:
-            promoter = "N/A"
-
-        data.append({
-            "Symbol": symbol,
-            "ROE": roe,
-            "EPS Growth": eps_growth,
-            "Promoter": promoter
-        })
-
-    driver.quit()
-    df = pd.DataFrame(data)
-    df.to_csv("screener_data.csv", index=False)
-
-if __name__ == "__main__":
-    start_websocket()
-    app.run(host="0.0.0.0", port=81)
+# Step 4: Proceed with your stock strategy here
+# This is where we will plug in Minervini + CANSLIM logic in next step
