@@ -1,5 +1,5 @@
 
-from smartapi.smartConnect import SmartConnect
+from smartapi.smartconnect import SmartConnect
 import pyotp
 import requests
 import os
