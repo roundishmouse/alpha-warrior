@@ -8,3 +8,4 @@ pyOpenSSL
 autobahn
 pyotp
 ntplib
+smartapi-python
