@@ -1,26 +1,24 @@
-
-from smartapi import SmartConnect
+from smartapi.smartConnect import SmartConnect
 import pyotp
-import requests
 import os
-from datetime import datetime
 
-api_key = "CTtSQeSy"
-client_code = "A505883"
-password = "6130"
-totp_secret = "3NO6IXIOTSDBEROL7QNWETWDEY"
+# Environment Variables (make sure these are set on Render)
+api_key = os.getenv("SMARTAPI_API_KEY")
+client_code = os.getenv("SMARTAPI_CLIENT_CODE")
+password = os.getenv("SMARTAPI_PASSWORD")
+totp_secret = os.getenv("SMARTAPI_TOTP")
 
-# Step 1: Generate TOTP
+# Generate TOTP
 totp = pyotp.TOTP(totp_secret).now()
 print("Generated TOTP:", totp)
 
-# Step 2: Create session
+# Initialize SmartConnect
 obj = SmartConnect(api_key)
-data = obj.generateSession(client_code, password, totp)
 
-# Step 3: Extract token
-auth_token = data['data']['jwtToken']
-print("Login Success. JWT Token:", auth_token)
-
-# Step 4: Proceed with your stock strategy here
-# This is where we will plug in Minervini + CANSLIM logic in next step
+# Perform login with positional arguments
+try:
+    data = obj.generateSession(client_code, password, totp)
+    print("Login successful!")
+    print("JWT Token:", data['data']['jwtToken'])
+except Exception as e:
+    print("Login failed:", e)
