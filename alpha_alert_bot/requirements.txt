@@ -9,4 +9,4 @@ autobahn
 pyotp
 ntplib
 service_identity
-git+https://github.com/angel-one/smartapi-python.git@38b7f8c0a9261d726275dd3ee81d6f9c989b3c7f#egg=smartapi-python
+git+https://github.com/angel-one/smartapi-python.git@baf62e2b2d91b3647b376519de370ed26f81d79a#egg=smartapi-python
