@@ -8,5 +8,6 @@ pyOpenSSL
 autobahn
 pyotp
 ntplib
+--extra-index-url https://pypi.org/simple/
 smartapi-python=1.0.6
 service_identity
