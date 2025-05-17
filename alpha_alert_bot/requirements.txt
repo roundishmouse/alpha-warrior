@@ -8,5 +8,5 @@ pyOpenSSL
 autobahn
 pyotp
 ntplib
-smartapi-python
+smartapi-python=1.0.6
 service_identity
