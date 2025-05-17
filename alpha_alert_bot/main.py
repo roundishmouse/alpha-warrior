@@ -1,4 +1,4 @@
-from smartapi.smartConnect import SmartConnect
+from smartapi import SmartConnect
 import os
 
 # Environment Variables
