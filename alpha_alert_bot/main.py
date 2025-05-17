@@ -2,7 +2,7 @@ from smartapi import SmartConnect
 import pyotp
 import os
 
-# Environment variables
+# Environment variables (set on Render)
 api_key = os.getenv("SMARTAPI_API_KEY")
 client_code = os.getenv("SMARTAPI_CLIENT_CODE")
 password = os.getenv("SMARTAPI_PASSWORD")
@@ -15,9 +15,9 @@ print("Generated TOTP:", totp)
 # Initialize SmartConnect
 obj = SmartConnect(api_key=api_key)
 
-# Login with only 3 args
+# Perform login
 try:
-    data = obj.generateSession(client_code, password, totp)  # Only 3 args
+    data = obj.generateSession(client_code, password, totp)
     print("Login successful!")
     print("JWT Token:", data['data']['jwtToken'])
 except Exception as e:
