@@ -1,7 +1,7 @@
 import os
 import pyotp
 from SmartApi.smartConnect import SmartConnect
-from smartapi_python.smartWebSocketV2 import SmartWebSocketV2
+from SmartApi.smartWebSocketV2 import SmartWebSocketV2
 from nse_token_data_cleaned import nse_tokens
 
 # Step 1: Load credentials from environment
