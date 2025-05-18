@@ -1,4 +1,4 @@
-from smartapi.smartConnect import SmartConnect
+from smartapi_python.smartConnect import SmartConnect
 import pyotp
 import os
 
