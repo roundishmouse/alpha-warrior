@@ -1,7 +1,7 @@
-from SmartApi import SmartConnect
-from SmartApi.smartWebSocketV2 import SmartWebSocketV2
-import pyotp
 import os
+import pyotp
+from smartapi_python.smartConnect import SmartConnect
+from smartapi_python.smartWebSocketV2 import SmartWebSocketV2
 from nse_token_data_cleaned import nse_tokens
 
 # Step 1: Load credentials from environment
@@ -21,6 +21,7 @@ print("Login successful")
 
 jwt_token = data["data"]["jwtToken"]
 feed_token = data["data"]["feedToken"]
+print("Feed token is:", feed_token)
 
 # Step 4: Prepare token list
 tokens = [f"nse_cm|{stock['token']}" for stock in nse_tokens]
@@ -47,5 +48,4 @@ ss.on_open = on_open
 ss.on_error = on_error
 ss.on_close = on_close
 
-# Step 6: Connect WebSocket
 ss.connect()
