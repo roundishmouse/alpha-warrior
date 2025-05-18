@@ -1,79 +1,72 @@
+import json
+import time
+from screener_scraper import get_fundamental_data
+from nse_token_data_cleaned import token_data
+import requests
 import os
-import pyotp
-import threading
-from flask import Flask
 from SmartApi.smartConnect import SmartConnect
-from SmartApi.smartWebSocketV2 import SmartWebSocketV2
-from nse_token_data_cleaned import nse_tokens
+from smartapi.smartWebSocketV2 import SmartWebSocketV2
+from flask import Flask
 
-# Step 1: Load credentials from environment
+app = Flask(__name__)
+
+# Load environment variables
 api_key = os.getenv("SMARTAPI_API_KEY")
 client_code = os.getenv("SMARTAPI_CLIENT_CODE")
 password = os.getenv("SMARTAPI_PASSWORD")
-totp_secret = os.getenv("SMARTAPI_TOTP")
+totp = os.getenv("SMARTAPI_TOTP")
+telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
+telegram_chat_id = os.getenv("T_BOT_CHAT_ID")
 
-# Step 2: Generate TOTP
-totp = pyotp.TOTP(totp_secret).now()
-print("Generated TOTP:", totp)
+def send_telegram_alert(message):
+    url = f"https://api.telegram.org/bot{telegram_token}/sendMessage"
+    data = {"chat_id": telegram_chat_id, "text": message}
+    requests.post(url, data=data)
 
-# Step 3: Login
-obj = SmartConnect(api_key=api_key)
-data = obj.generateSession(client_code, password, totp)
-print("Login successful")
+def filter_stocks(fundamentals):
+    filtered = []
+    for stock in fundamentals:
+        try:
+            roe = float(stock["roe"]) if stock["roe"] else 0
+            eps = float(stock["eps_growth"]) if stock["eps_growth"] else 0
+            high = float(stock["52w_high"]) if stock["52w_high"] else 0
 
-jwt_token = data["data"]["jwtToken"]
-feed_token = data["data"]["feedToken"]
-print("Feed token is:", feed_token)
+            if roe >= 15 and eps >= 20:
+                filtered.append(stock)
+        except Exception as e:
+            print(f"Error in filtering {stock['symbol']}: {e}")
+    return filtered
 
-# Step 4: Prepare token list
-token_ids = [int(stock["token"]) for stock in nse_tokens]
-print(f"Subscribing to {len(token_ids)} tokens")
+def main():
+    print("Logging in...")
+    obj = SmartConnect(api_key=api_key)
+    session = obj.generateSession(client_code, password, totp)
+    feed_token = session["data"]["feedToken"]
+    print("Login successful.")
 
-# Step 5: Setup WebSocket
-ss = SmartWebSocketV2(
-    auth_token=jwt_token,
-    api_key=api_key,
-    client_code=client_code,
-    feed_token=feed_token
-)
+    print("Loading symbols from token list...")
+    symbols = [entry["symbol"] for entry in token_data if not entry["symbol"].endswith("ETF")]
 
-# Handlers
-def on_data(wsapp, message):
-    print("LIVE DATA:", message)
+    print(f"Scanning {len(symbols)} stocks from Screener...")
+    fundamentals = get_fundamental_data(symbols)
 
-def on_open(wsapp):
-    print("WebSocket opened. Sending subscription.")
-    ss.subscribe(
-        mode="full",
-        token_list=[{"exchangeType": 1, "tokens": token_ids}],
-        correlation_id="alpha_bot_001"
-    )
+    print("Applying CANSLIM + Minervini filters...")
+    final_stocks = filter_stocks(fundamentals)
 
-def on_error(wsapp, error, reason):
-    print("WebSocket Error:", error, reason)
+    if final_stocks:
+        message = "Top CANSLIM + Minervini Stocks Today:\n" + "\n".join(
+            [f"{s['symbol']} | ROE: {s['roe']} | EPS: {s['eps_growth']} | 52W High: {s['52w_high']}" for s in final_stocks]
+        )
+    else:
+        message = "No stocks passed CANSLIM + Minervini filters today."
 
-def on_close(wsapp):
-    print("WebSocket closed")
+    print(message)
+    send_telegram_alert(message)
 
-# Bind handlers
-ss.on_open = on_open
-ss.on_data = on_data
-ss.on_error = on_error
-ss.on_close = on_close
+@app.route("/")
+def home():
+    return "Quant bot running."
 
-# Flask server to keep Render service alive
-app = Flask(__name__)
-
-@app.route('/')
-def index():
-    return "Alpha Bot is Live!"
-
-def run_flask():
+if __name__ == "__main__":
+    main()
     app.run(host="0.0.0.0", port=10000)
-
-# Start Flask in separate thread and run WebSocket
-flask_thread = threading.Thread(target=run_flask)
-flask_thread.start()
-
-# Start WebSocket connection
-ss.connect()
