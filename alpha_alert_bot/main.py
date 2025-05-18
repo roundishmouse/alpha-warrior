@@ -41,6 +41,7 @@ def main():
     print("Logging in...")
     obj = SmartConnect(api_key=api_key)
     session = obj.generateSession(client_code, password, totp)
+    print("Login response:", data)
     feed_token = session["data"]["feedToken"]
     print("Login successful.")
 
