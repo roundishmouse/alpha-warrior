@@ -41,7 +41,7 @@ def on_data(wsapp, message):
 
 def on_open(wsapp):
     print("WebSocket opened. Sending subscription.")
-    ss.subscribe(tokens)
+    ss.subscribe(mode="full", token_list=tokens)
 
 def on_error(wsapp, error, reason):
     print("WebSocket Error:", error, reason)
