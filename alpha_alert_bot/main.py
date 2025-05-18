@@ -1,76 +1,97 @@
 import os
-import pyotp
 import threading
+import time
+import datetime
+import requests
+import pyotp
 from flask import Flask
 from SmartApi.smartConnect import SmartConnect
-from SmartApi.smartWebSocketV2 import SmartWebSocketV2
-from screener_scraper import get_fundamental_data
-from nse_token_data_cleaned import nse_tokens
+from nse_token_data import token_data
+from screener_scraper import get_screener_data
+from telegram import Bot
 
-# Step 1: Load credentials from environment
+# Environment Variables
 api_key = os.getenv("SMARTAPI_API_KEY")
 client_code = os.getenv("SMARTAPI_CLIENT_CODE")
 password = os.getenv("SMARTAPI_PASSWORD")
-totp_secret = os.getenv("SMARTAPI_TOTP")
+totp_key = os.getenv("SMARTAPI_TOTP")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+T_BOT_CHAT_ID = os.getenv("T_BOT_CHAT_ID")
 
-# Step 2: Generate TOTP
-totp = pyotp.TOTP(totp_secret).now()
-print("Generated TOTP:", totp)
+# Telegram Bot
+bot = Bot(token=TELEGRAM_BOT_TOKEN)
 
-# Step 3: Login
+# TOTP
+totp = pyotp.TOTP(totp_key).now()
+
+# Login
 obj = SmartConnect(api_key=api_key)
 data = obj.generateSession(client_code, password, totp)
 print("Login response:", data)
+
+if data.get("status") is False:
+    raise Exception("Login failed: " + str(data))
+
 jwt_token = data["data"]["jwtToken"]
 feed_token = data["data"]["feedToken"]
-print("Login successful.")
+print("Login successful")
 
-# Step 4: Prepare tokens
-token_ids = [int(stock["token"]) for stock in nse_tokens]
+# Filtered stock list (first 50 for test)
+limited_tokens = token_data[:50]
 
-# Step 5: Setup WebSocket
-ss = SmartWebSocketV2(
-    auth_token=jwt_token,
-    api_key=api_key,
-    client_code=client_code,
-    feed_token=feed_token
-)
+# Screener Cache
+screener_cache = {}
 
-def on_data(wsapp, message):
-    print("LIVE DATA:", message)
+# CANSLIM + Minervini Filter
+def passes_filters(stock_data):
+    roe = float(stock_data.get("ROE", "0").replace("%", "").strip())
+    eps_growth = float(stock_data.get("EPS growth", "0").replace("%", "").strip())
+    result_status = stock_data.get("Result", "").lower()
 
-def on_open(wsapp):
-    print("WebSocket opened. Sending subscription.")
-    ss.subscribe(
-        mode="full",
-        token_list=[{"exchangeType": 1, "tokens": token_ids}],
-        correlation_id="alpha_bot_001"
+    return (
+        roe > 15 and
+        eps_growth > 20 and
+        "good" in result_status
     )
 
-def on_error(wsapp, error, reason):
-    print("WebSocket Error:", error, reason)
+# Stock Scanner
+def scan_stocks():
+    matching_stocks = []
+    for stock in limited_tokens:
+        symbol = stock["symbol"]
+        if symbol in screener_cache:
+            data = screener_cache[symbol]
+        else:
+            try:
+                data = get_screener_data(symbol)
+                screener_cache[symbol] = data
+            except Exception as e:
+                print(f"Error fetching data for {symbol}: {e}")
+                continue
 
-def on_close(wsapp):
-    print("WebSocket closed")
+        if passes_filters(data):
+            matching_stocks.append(symbol)
 
-ss.on_open = on_open
-ss.on_data = on_data
-ss.on_error = on_error
-ss.on_close = on_close
+    if matching_stocks:
+        message = "Top filtered stocks today:
+" + "\n".join(matching_stocks)
+        bot.send_message(chat_id=T_BOT_CHAT_ID, text=message)
+        print("Alert sent on Telegram")
+    else:
+        print("No stocks matched the filters.")
 
-# Flask server to keep Render service alive
+# Flask keep-alive
 app = Flask(__name__)
-
 @app.route('/')
-def index():
-    return "Alpha Bot is Live!"
+def home():
+    return "Bot is alive!"
 
 def run_flask():
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host='0.0.0.0', port=10000)
 
-# Start Flask in thread
-flask_thread = threading.Thread(target=run_flask)
-flask_thread.start()
+# Start everything
+if __name__ == "__main__":
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()
 
-# Start WebSocket in main thread
-ss.connect()
+    scan_stocks()
