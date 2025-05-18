@@ -1,5 +1,7 @@
 import os
 import pyotp
+import threading
+from flask import Flask
 from SmartApi.smartConnect import SmartConnect
 from SmartApi.smartWebSocketV2 import SmartWebSocketV2
 from nse_token_data_cleaned import nse_tokens
@@ -23,7 +25,7 @@ jwt_token = data["data"]["jwtToken"]
 feed_token = data["data"]["feedToken"]
 print("Feed token is:", feed_token)
 
-# Step 4: Prepare token list (integer token IDs only)
+# Step 4: Prepare token list
 token_ids = [int(stock["token"]) for stock in nse_tokens]
 print(f"Subscribing to {len(token_ids)} tokens")
 
@@ -59,16 +61,19 @@ ss.on_data = on_data
 ss.on_error = on_error
 ss.on_close = on_close
 
-# Start WebSocket
-ss.connect()
-
-# ---- Keep-alive Flask app for Render ----
-from flask import Flask
+# Flask server to keep Render service alive
 app = Flask(__name__)
 
 @app.route('/')
 def index():
     return "Alpha Bot is Live!"
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+def run_flask():
+    app.run(host="0.0.0.0", port=10000)
+
+# Start Flask in separate thread and run WebSocket
+flask_thread = threading.Thread(target=run_flask)
+flask_thread.start()
+
+# Start WebSocket connection
+ss.connect()
