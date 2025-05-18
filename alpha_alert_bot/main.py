@@ -1,8 +1,8 @@
 
+import os
+import pyotp
 from SmartApi.smartConnect import SmartConnect
 from SmartApi.smartWebSocketV2 import SmartWebSocketV2
-import pyotp
-import os
 from nse_token_data_cleaned import nse_tokens
 
 # Step 1: Load credentials from environment
@@ -24,11 +24,11 @@ jwt_token = data["data"]["jwtToken"]
 feed_token = data["data"]["feedToken"]
 print("Feed token is:", feed_token)
 
-# Step 4: Prepare token list
-tokens = [f"nse_cm|{stock['token']}" for stock in nse_tokens]
-print(f"Subscribing to {len(tokens)} tokens")
+# Step 4: Prepare token list (integer token IDs only)
+token_ids = [int(stock["token"]) for stock in nse_tokens]
+print(f"Subscribing to {len(token_ids)} tokens")
 
-# Step 5: Setup WebSocket using keyword arguments
+# Step 5: Setup WebSocket
 ss = SmartWebSocketV2(
     auth_token=jwt_token,
     api_key=api_key,
@@ -44,8 +44,8 @@ def on_open(wsapp):
     print("WebSocket opened. Sending subscription.")
     ss.subscribe(
         mode="full",
-        token_list=tokens,
-        correlation_id="alpha-bot-001"
+        token_list=[{"exchangeType": 1, "tokens": token_ids}],
+        correlation_id="alpha_bot_001"
     )
 
 def on_error(wsapp, error, reason):
