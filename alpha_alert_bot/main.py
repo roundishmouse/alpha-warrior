@@ -6,7 +6,7 @@ import requests
 import pyotp
 from flask import Flask
 from SmartApi.smartConnect import SmartConnect
-from nse_token_data import token_data
+from nse_token_data import nse_token
 from screener_scraper import get_screener_data
 from telegram import Bot
 
@@ -37,7 +37,7 @@ feed_token = data["data"]["feedToken"]
 print("Login successful")
 
 # Filtered stock list (first 50 for test)
-limited_tokens = token_data[:50]
+limited_tokens = nse_token[:50]
 
 # Screener Cache
 screener_cache = {}
