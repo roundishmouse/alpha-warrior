@@ -6,7 +6,6 @@ from SmartApi.smartConnect import SmartConnect
 from SmartApi.smartWebSocketV2 import SmartWebSocketV2
 from screener_scraper import get_fundamental_data
 from nse_token_data_cleaned import nse_tokens
-from telegram import Bot
 
 # Step 1: Load credentials
 api_key = os.getenv("SMARTAPI_API_KEY")
