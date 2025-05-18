@@ -100,3 +100,18 @@ flask_thread = threading.Thread(target=run_flask)
 flask_thread.start()
 
 ss.connect()
+
+import requests
+
+def send_telegram_alert(message):
+    TELEGRAM_BOT_TOKEN = "your_bot_token"
+    TELEGRAM_CHAT_ID = "your_chat_id"
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message
+    }
+    try:
+        requests.post(url, data=payload)
+    except Exception as e:
+        print(f"Telegram alert failed: {e}")
