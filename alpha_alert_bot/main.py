@@ -5,7 +5,7 @@ import time
 from SmartApi.smartConnect import SmartConnect
 from SmartApi.smartWebSocketV2 import SmartWebSocketV2
 from nse_token_data_cleaned import nse_tokens
-from screener_scraper import fetch_fundamentals
+from screener_scraper import get_fundamental_data
 from flask import Flask
 
 # Step 1: Load credentials
@@ -38,7 +38,7 @@ token_ids = [int(entry["token"]) for entry in nse_tokens if "token" in entry]
 
 # Step 5: Fetch fundamentals
 print("Fetching fundamentals...")
-fundamentals = fetch_fundamentals(symbols)
+fundamentals = get_fundamental_data(symbols)
 
 # Step 6: Filter stocks
 def filter_stocks(fundamentals):
