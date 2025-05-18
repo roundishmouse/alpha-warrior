@@ -59,7 +59,7 @@ if filtered:
     message = "Top filtered stocks today:\n" + "\n".join([s["symbol"] for s in filtered])
 else:
     message = "No stocks passed the filter today."
-bot.send_message(chat_id=telegram_chat_id, text=message)
+send_telegram_alert(message)
 
 # Step 8: WebSocket
 ss = SmartWebSocketV2(auth_token=jwt_token, api_key=api_key, client_code=client_code, feed_token=feed_token)
@@ -104,8 +104,8 @@ ss.connect()
 import requests
 
 def send_telegram_alert(message):
-    TELEGRAM_BOT_TOKEN = "your_bot_token"
-    TELEGRAM_CHAT_ID = "your_chat_id"
+    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+    TELEGRAM_CHAT_ID = os.getenv("T_BOT_CHAT_ID")
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
