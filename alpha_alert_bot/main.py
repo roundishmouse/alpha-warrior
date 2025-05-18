@@ -55,7 +55,6 @@ def filter_stocks(fundamentals):
 filtered = filter_stocks(fundamentals)
 
 # Step 7: Send Telegram alert
-bot = Bot(token=telegram_token)
 if filtered:
     message = "Top filtered stocks today:\n" + "\n".join([s["symbol"] for s in filtered])
 else:
