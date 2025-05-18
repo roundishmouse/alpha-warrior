@@ -1,7 +1,7 @@
 import json
 import time
 from screener_scraper import get_fundamental_data
-from nse_token_data_cleaned import token_data
+from nse_token_data_cleaned import nse_tokens
 import requests
 import os
 from SmartApi.smartConnect import SmartConnect
