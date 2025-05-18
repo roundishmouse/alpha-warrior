@@ -5,7 +5,7 @@ from nse_token_data_cleaned import nse_tokens
 import requests
 import os
 from SmartApi.smartConnect import SmartConnect
-from smartapi.smartWebSocketV2 import SmartWebSocketV2
+from SmartApi.smartWebSocketV2 import SmartWebSocketV2
 from flask import Flask
 
 app = Flask(__name__)
