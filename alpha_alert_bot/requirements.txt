@@ -10,3 +10,4 @@ autobahn
 pyotp
 ntplib
 service_identity
+logzero
