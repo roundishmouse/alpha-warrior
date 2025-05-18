@@ -27,7 +27,7 @@ tokens = [f"nse_cm|{stock['token']}" for stock in nse_tokens]
 print(f"Subscribing to {len(tokens)} tokens")
 
 # Step 5: Setup WebSocket
-ss = SmartWebSocketV2(api_key, client_code, feed_token)
+ss = SmartWebSocketV2(feed_token, client_code, api_key)
 
 def on_data(wsapp, message):
     print("LIVE DATA:", message)
