@@ -6,7 +6,7 @@ import requests
 import pyotp
 from flask import Flask
 from SmartApi.smartConnect import SmartConnect
-from nse_token_data import nse_token
+from nse_token_data import nse_tokens
 from screener_scraper import get_screener_data
 from telegram import Bot
 
@@ -37,7 +37,7 @@ feed_token = data["data"]["feedToken"]
 print("Login successful")
 
 # Filtered stock list (first 50 for test)
-limited_tokens = nse_token[:50]
+limited_tokens = nse_tokens[:50]
 
 # Screener Cache
 screener_cache = {}
@@ -73,7 +73,7 @@ def scan_stocks():
             matching_stocks.append(symbol)
 
     if matching_stocks:
-        message = "Top filtered stocks today:
+        message = "Top filtered stocks today:"
 " + "\n".join(matching_stocks)
         bot.send_message(chat_id=T_BOT_CHAT_ID, text=message)
         print("Alert sent on Telegram")
