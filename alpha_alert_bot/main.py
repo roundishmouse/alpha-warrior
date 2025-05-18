@@ -5,7 +5,7 @@ from flask import Flask
 from SmartApi.smartConnect import SmartConnect
 from SmartApi.smartWebSocketV2 import SmartWebSocketV2
 from screener_scraper import get_fundamental_data
-from nse_token_data_cleaned import token_data
+from nse_token_data_cleaned import nse_tokens
 
 # Step 1: Load credentials
 api_key = os.getenv("SMARTAPI_API_KEY")
@@ -26,7 +26,7 @@ feed_token = data["data"]["feedToken"]
 print("Login successful")
 
 # Step 4: Load symbols
-symbols = [entry["symbol"] for entry in token_data if entry.get("symbol")]
+symbols = [entry["symbol"] for entry in nse_tokens if entry.get("symbol")]
 
 # Step 5: Screener data
 fundamentals = get_fundamental_data(symbols)
