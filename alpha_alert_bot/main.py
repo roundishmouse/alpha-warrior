@@ -19,17 +19,23 @@ obj = SmartConnect(api_key=api_key)
 data = obj.generateSession(client_code, password, totp)
 print("Login successful")
 
-auth_token = data["data"]["jwtToken"]
+jwt_token = data["data"]["jwtToken"]
 feed_token = data["data"]["feedToken"]
-print("Feed token:", feed_token)
+print("Feed token is:", feed_token)
 
 # Step 4: Prepare token list
 tokens = [f"nse_cm|{stock['token']}" for stock in nse_tokens]
 print(f"Subscribing to {len(tokens)} tokens")
 
-# Step 5: Setup WebSocket (correct argument order)
-ss = SmartWebSocketV2(client_code, auth_token, api_key)
+# Step 5: Setup WebSocket using keyword arguments (correct method)
+ss = SmartWebSocketV2(
+    auth_token=jwt_token,
+    api_key=api_key,
+    client_code=client_code,
+    feed_token=feed_token
+)
 
+# Handlers
 def on_data(wsapp, message):
     print("LIVE DATA:", message)
 
@@ -43,10 +49,11 @@ def on_error(wsapp, error, reason):
 def on_close(wsapp):
     print("WebSocket closed")
 
+# Bind handlers
 ss.on_data = on_data
 ss.on_open = on_open
 ss.on_error = on_error
 ss.on_close = on_close
 
-# Step 6: Connect
+# Start WebSocket
 ss.connect()
