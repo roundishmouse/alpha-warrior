@@ -1,5 +1,23 @@
 import os
 
+import requests
+
+        if hybrid_filters(stock):
+            print(f"Sending alert for: {stock['symbol']}")
+            send_telegram_alert(message)
+    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+    TELEGRAM_CHAT_ID = os.getenv("T_BOT_CHAT_ID")
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message
+    }
+    try:
+        requests.post(url, data=payload)
+    except Exception as e:
+        print(f"Telegram alert failed: {e}")
+import pyotp
+
 def hybrid_filters(stock):
     try:
         roe = float(stock.get("ROE", 0))
@@ -21,23 +39,6 @@ def hybrid_filters(stock):
     except:
         return False
     return False
-import requests
-
-def if hybrid_filters(stock):
-            print(f"Sending alert for: {stock['symbol']}")
-            send_telegram_alert(message):
-    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-    TELEGRAM_CHAT_ID = os.getenv("T_BOT_CHAT_ID")
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message
-    }
-    try:
-        requests.post(url, data=payload)
-    except Exception as e:
-        print(f"Telegram alert failed: {e}")
-import pyotp
 import threading
 from flask import Flask
 from SmartApi.smartConnect import SmartConnect
@@ -97,7 +98,7 @@ if filtered:
     message = "Top filtered stocks today:\n" + "\n".join([s["symbol"] for s in filtered])
 else:
     message = "No stocks passed the filter today."
-if hybrid_filters(stock):
+        if hybrid_filters(stock):
             print(f"Sending alert for: {stock['symbol']}")
             send_telegram_alert(message)
 
