@@ -37,10 +37,10 @@ def fetch_fundamentals(symbol):
 
 def fetch_fundamentals_threaded(symbols):
     fundamentals = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         future_to_symbol = {executor.submit(fetch_fundamentals, symbol): symbol for symbol in symbols}
         for future in concurrent.futures.as_completed(future_to_symbol):
             fundamentals.append(future.result())
             if len(fundamentals) % 5 == 0:
-                time.sleep(1)
+                time.sleep(3)
     return fundamentals
