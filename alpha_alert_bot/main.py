@@ -2,9 +2,7 @@ import os
 
 import requests
 
-        if hybrid_filters(stock):
-            print(f"Sending alert for: {stock['symbol']}")
-            send_telegram_alert(message)
+def send_telegram_alert(message):
     TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
     TELEGRAM_CHAT_ID = os.getenv("T_BOT_CHAT_ID")
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -28,7 +26,6 @@ def hybrid_filters(stock):
         sma_150 = float(stock.get("SMA150", 0))
         sma_50_vol = float(stock.get("50DMA Volume", 0))
         curr_vol = float(stock.get("Volume", 0))
-
         if (
             eps_growth > 20 and
             roe > 15 and
