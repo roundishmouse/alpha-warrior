@@ -39,7 +39,7 @@ def hybrid_filters(stock):
 from flask import Flask
 from SmartApi.smartConnect import SmartConnect
 from SmartApi.smartWebSocketV2 import SmartWebSocketV2
-from screener_scraper import fetch_fundamentals_threaded as get_fundamental_data
+from screener_scraper import fetch_technical_data as get_fundamental_data
 from nse_token_data_cleaned import nse_tokens
 
 # Step 1: Load credentials
