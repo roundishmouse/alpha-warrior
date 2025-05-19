@@ -62,7 +62,9 @@ jwt_token = data["data"]["jwtToken"]
 feed_token = data["data"]["feedToken"]
 
 # Step 4: Load symbols (limit to 50 for testing)
-symbols = [entry["symbol"] for entry in nse_tokens[:50]]
+symbols = [entry["symbol"] for entry in nse_tokens]
+print(f"Loaded {len(symbols)} symbols")
+print(f"First 5 symbols: {symbols[:5]}")
 
 # Step 5: Fetch Screener data
 fundamentals = get_fundamental_data(symbols)
@@ -100,7 +102,7 @@ send_telegram_alert(message)
 
 # Step 8: WebSocket
 ss = SmartWebSocketV2(auth_token=jwt_token, api_key=api_key, client_code=client_code, feed_token=feed_token)
-token_ids = [int(stock["token"]) for stock in nse_tokens[:50]]
+token_ids = [int(stock["token"]) for stock in nse_tokens]
 
 def on_data(wsapp, message):
     print("LIVE DATA:", message)
