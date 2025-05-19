@@ -1,5 +1,26 @@
 import os
 
+def hybrid_filters(stock):
+    try:
+        roe = float(stock.get("ROE", 0))
+        eps_growth = float(stock.get("EPS growth", 0))
+        price = float(stock.get("price", 0))
+        high_52 = float(stock.get("52w high", 0))
+        sma_150 = float(stock.get("SMA150", 0))
+        sma_50_vol = float(stock.get("50DMA Volume", 0))
+        curr_vol = float(stock.get("Volume", 0))
+
+        if (
+            eps_growth > 20 and
+            roe > 15 and
+            price > sma_150 and
+            price >= 0.9 * high_52 and
+            curr_vol > sma_50_vol
+        ):
+            return True
+    except:
+        return False
+    return False
 import requests
 
 def if hybrid_filters(stock):
@@ -120,28 +141,4 @@ flask_thread.start()
 
 ss.connect()
 
-import request
-def hybrid_filters(stock):
-    try:
-        roe = float(stock.get("ROE", 0))
-        eps_growth = float(stock.get("EPS growth", 0))
-        price = float(stock.get("price", 0))
-        high_52 = float(stock.get("52w high", 0))
-        sma_150 = float(stock.get("SMA150", 0))
-        sma_50_vol = float(stock.get("50DMA Volume", 0))
-        curr_vol = float(stock.get("Volume", 0))
-
-        if (
-            eps_growth > 20 and
-            roe > 15 and
-            price > sma_150 and
-            price >= 0.9 * high_52 and
-            curr_vol > sma_50_vol
-        ):
-            return True
-    except:
-        return False
-    return False
-
-
-s
+import requests
