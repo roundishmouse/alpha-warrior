@@ -42,5 +42,5 @@ def fetch_fundamentals_threaded(symbols):
         for future in concurrent.futures.as_completed(future_to_symbol):
             fundamentals.append(future.result())
             if len(fundamentals) % 5 == 0:
-                time.sleep(3)
+                time.sleep(5)
     return fundamentals
