@@ -17,6 +17,7 @@ import requests
     except Exception as e:
         print(f"Telegram alert failed: {e}")
 import pyotp
+import threading
 
 def hybrid_filters(stock):
     try:
@@ -39,7 +40,7 @@ def hybrid_filters(stock):
     except:
         return False
     return False
-import threading
+
 from flask import Flask
 from SmartApi.smartConnect import SmartConnect
 from SmartApi.smartWebSocketV2 import SmartWebSocketV2
@@ -98,9 +99,7 @@ if filtered:
     message = "Top filtered stocks today:\n" + "\n".join([s["symbol"] for s in filtered])
 else:
     message = "No stocks passed the filter today."
-        if hybrid_filters(stock):
-            print(f"Sending alert for: {stock['symbol']}")
-            send_telegram_alert(message)
+send_telegram_alert(message)
 
 # Step 8: WebSocket
 ss = SmartWebSocketV2(auth_token=jwt_token, api_key=api_key, client_code=client_code, feed_token=feed_token)
