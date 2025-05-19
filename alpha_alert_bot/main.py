@@ -2,7 +2,9 @@ import os
 
 import requests
 
-def send_telegram_alert(message):
+def if hybrid_filters(stock):
+            print(f"Sending alert for: {stock['symbol']}")
+            send_telegram_alert(message):
     TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
     TELEGRAM_CHAT_ID = os.getenv("T_BOT_CHAT_ID")
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -74,7 +76,9 @@ if filtered:
     message = "Top filtered stocks today:\n" + "\n".join([s["symbol"] for s in filtered])
 else:
     message = "No stocks passed the filter today."
-send_telegram_alert(message)
+if hybrid_filters(stock):
+            print(f"Sending alert for: {stock['symbol']}")
+            send_telegram_alert(message)
 
 # Step 8: WebSocket
 ss = SmartWebSocketV2(auth_token=jwt_token, api_key=api_key, client_code=client_code, feed_token=feed_token)
@@ -116,4 +120,28 @@ flask_thread.start()
 
 ss.connect()
 
-import requests
+import request
+def hybrid_filters(stock):
+    try:
+        roe = float(stock.get("ROE", 0))
+        eps_growth = float(stock.get("EPS growth", 0))
+        price = float(stock.get("price", 0))
+        high_52 = float(stock.get("52w high", 0))
+        sma_150 = float(stock.get("SMA150", 0))
+        sma_50_vol = float(stock.get("50DMA Volume", 0))
+        curr_vol = float(stock.get("Volume", 0))
+
+        if (
+            eps_growth > 20 and
+            roe > 15 and
+            price > sma_150 and
+            price >= 0.9 * high_52 and
+            curr_vol > sma_50_vol
+        ):
+            return True
+    except:
+        return False
+    return False
+
+
+s
