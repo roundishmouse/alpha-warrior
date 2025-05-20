@@ -1,9 +1,7 @@
-
 import os
 import time
 import threading
 from flask import Flask
-import yfinance as yf
 from SmartApi.smartConnect import SmartConnect
 from SmartApi.smartWebSocketV2 import SmartWebSocketV2
 from nse_token_data_cleaned import nse_tokens
@@ -18,34 +16,31 @@ def home():
     return "Bot is running."
 
 def send_telegram_alert(symbol):
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("T_BOT_CHAT_ID")
-    message = f"ALERT: {symbol} matches criteria"
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
+        token = os.getenv("TELEGRAM_BOT_TOKEN")
+        chat_id = os.getenv("T_BOT_CHAT_ID")
+        message = f"ALERT: {symbol} matches criteria"
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
         requests.post(url, data={"chat_id": chat_id, "text": message})
     except Exception as e:
         print(f"Telegram error: {e}")
 
 def hybrid_filters(stock):
     try:
-        price = float(stock.get("price", 0))
-        high_52 = float(stock.get("52w high", 0))
-        sma150 = float(stock.get("SMA150", 0))
-        sma50_vol = float(stock.get("50DMA Volume", 0))
-        curr_vol = float(stock.get("Volume", 0))
+        price = float(stock.get("price", 0) or 0)
+        high_52 = float(stock.get("52w high", 0) or 0)
+        sma50 = float(stock.get("SMA50", 0) or 0)
+        sma_vol = float(stock.get("SOMA Volume", 0) or 0)
+        curr_vol = float(stock.get("Volume", 0) or 0)
 
-        if (
-            price > sma150 and
-            price >= 0.9 * high_52 and
-            curr_vol > sma50_vol
-        ):
+        if price > sma50 and price >= 0.9 * high_52 and curr_vol >= sma_vol:
             return True
     except:
         pass
     return False
 
 def fetch_technical_data(symbols):
+    import yfinance as yf
     data = []
     for symbol in symbols:
         try:
@@ -57,20 +52,18 @@ def fetch_technical_data(symbols):
 
             current_price = hist["Close"].iloc[-1]
             high_52 = hist["High"].rolling(window=252).max().iloc[-1]
-            sma150 = hist["Close"].rolling(window=150).mean().iloc[-1]
-            sma50_vol = hist["Volume"].rolling(window=50).mean().iloc[-1]
+            sma50 = hist["Close"].rolling(window=50).mean().iloc[-1]
+            sma_vol = hist["Volume"].rolling(window=50).mean().iloc[-1]
             current_vol = hist["Volume"].iloc[-1]
 
             data.append({
                 "symbol": symbol,
                 "price": round(current_price, 2),
                 "52w high": round(high_52, 2),
-                "SMA150": round(sma150, 2),
-                "50DMA Volume": int(sma50_vol),
-                "Volume": int(current_vol),
+                "SMA50": round(sma50, 2),
+                "SOMA Volume": int(sma_vol),
+                "Volume": int(current_vol)
             })
-
-            time.sleep(0.1)
         except Exception as e:
             print(f"Error fetching {symbol}: {e}")
     return data
@@ -82,23 +75,28 @@ def run_bot():
         client_code = os.getenv("SMARTAPI_CLIENT_CODE")
         password = os.getenv("SMARTAPI_PASSWORD")
         totp_secret = os.getenv("SMARTAPI_TOTP")
-
         totp = pyotp.TOTP(totp_secret).now()
         time.sleep(5)  # Wait for TOTP to be valid
 
         obj = SmartConnect(api_key=api_key)
         data = obj.generateSession(client_code, password, totp)
-        jwt_token = data["data"]["jwtToken"]
-        feed_token = data["data"]["feedToken"]
+        token = data["data"]["jwtToken"]
         print("Login successful.")
 
         symbols = [entry["symbol"] for entry in nse_tokens]
-        fundamentals = fetch_technical_data(symbols)
-        selected = [f["symbol"] for f in fundamentals if hybrid_filters(f)]
+        tech = fetch_technical_data(symbols)
+        fundamentals = get_fundamental_data(symbols)
 
-        print(f"Final picks: {selected}")
-        for symbol in selected:
-            send_telegram_alert(symbol)
+        combined = []
+        for f in fundamentals:
+            match = next((t for t in tech if t["symbol"] == f["symbol"]), None)
+            if match:
+                match.update(f)
+                combined.append(match)
+
+        for stock in combined:
+            if hybrid_filters(stock):
+                send_telegram_alert(stock["symbol"])
 
     except Exception as e:
         print(f"Bot error: {e}")
