@@ -18,10 +18,10 @@ app = Flask(__name__)
 def home():
     return "Bot is running."
 
-def send_telegram_alert(symbol):
+def send_telegram_alert(stock):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("T_BOT_CHAT_ID")
-    message = f"ALERT: {symbol} matches hybrid filter criteria"
+    message = f"ALERT: {stock['symbol']}\nPrice: ₹{stock['price']}\nScore: {stock['score']:.2f}"
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
         requests.post(url, data={"chat_id": chat_id, "text": message})
@@ -50,6 +50,41 @@ def hybrid_filters(stock):
     except:
         return False
 
+def score_stock(stock):
+    score = 0
+    price = stock["price"]
+    high_52 = stock["52w high"]
+    sma20 = stock["SMA20"]
+    sma50 = stock["SMA50"]
+    sma150 = stock["SMA150"]
+    vol = stock["Volume"]
+    vol50 = stock["SOMA Volume"]
+
+    # Price within 5% of 52w high
+    proximity = price / high_52
+    if proximity >= 0.95:
+        score += 2
+    elif proximity >= 0.90:
+        score += 1
+
+    # Price above moving averages
+    if price > sma20:
+        score += 1
+    if price > sma50:
+        score += 1
+    if price > sma150:
+        score += 1
+
+    # Volume strength
+    vol_ratio = vol / vol50 if vol50 else 0
+    if vol_ratio > 2:
+        score += 2
+    elif vol_ratio > 1.5:
+        score += 1
+
+    stock["score"] = score
+    return stock
+
 def fetch_technical_data(symbols):
     data = []
     for idx, symbol in enumerate(symbols):
@@ -62,6 +97,8 @@ def fetch_technical_data(symbols):
                 continue
             current_price = hist["Close"].iloc[-1]
             high_52 = hist["High"].rolling(window=252).max().iloc[-1]
+            sma20 = hist["Close"].rolling(window=20).mean().iloc[-1]
+            sma50 = hist["Close"].rolling(window=50).mean().iloc[-1]
             sma150 = hist["Close"].rolling(window=150).mean().iloc[-1]
             sma_vol = hist["Volume"].rolling(window=50).mean().iloc[-1]
             curr_vol = hist["Volume"].iloc[-1]
@@ -69,6 +106,8 @@ def fetch_technical_data(symbols):
                 "symbol": symbol,
                 "price": round(current_price, 2),
                 "52w high": round(high_52, 2),
+                "SMA20": round(sma20, 2),
+                "SMA50": round(sma50, 2),
                 "SMA150": round(sma150, 2),
                 "SOMA Volume": round(sma_vol, 2),
                 "Volume": round(curr_vol, 2),
@@ -105,7 +144,6 @@ def run_bot():
 
         obj = SmartConnect(api_key=api_key)
         data = obj.generateSession(client_code, password, totp)
-        token = data["data"]["jwtToken"]
         print("Login successful.")
 
         if not is_market_bullish():
@@ -125,13 +163,13 @@ def run_bot():
             print("No stocks matched today.")
             return
 
-        ranked = sorted(filtered, key=lambda x: (
-            x["Volume"] * ((x["price"] / x["SMA150"]) + (x["price"] / x["52w high"]))
-        ), reverse=True)
-
+        scored = [score_stock(s) for s in filtered]
+        ranked = sorted(scored, key=lambda x: x["score"], reverse=True)
         top_stocks = ranked[:5]
+
         for stock in top_stocks:
-            send_telegram_alert(stock["symbol"])
+            send_telegram_alert(stock)
+            print(f"Sent alert for {stock['symbol']} (Score: {stock['score']})")
 
     except Exception as e:
         print(f"Bot error: {e}")
