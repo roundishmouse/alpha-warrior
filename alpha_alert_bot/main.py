@@ -52,8 +52,9 @@ def hybrid_filters(stock):
 
 def fetch_technical_data(symbols):
     data = []
-    for symbol in symbols:
+    for idx, symbol in enumerate(symbols):
         try:
+            print(f"Fetching {idx+1}/{len(symbols)}: {symbol}")
             yf_symbol = symbol if symbol.endswith(".NS") else symbol + ".NS"
             stock = yf.Ticker(yf_symbol)
             hist = stock.history(period="300d")
@@ -115,17 +116,22 @@ def run_bot():
         print(f"Scanning {len(symbols)} symbols...")
 
         tech_data = fetch_technical_data(symbols)
+        print(f"Technical data fetched: {len(tech_data)}")
+
         filtered = [s for s in tech_data if hybrid_filters(s)]
+        print(f"Stocks after hybrid filter: {len(filtered)}")
+
+        if not filtered:
+            print("No stocks matched today.")
+            return
+
         ranked = sorted(filtered, key=lambda x: (
             x["Volume"] * ((x["price"] / x["SMA150"]) + (x["price"] / x["52w high"]))
         ), reverse=True)
 
         top_stocks = ranked[:5]
-        if len(top_stocks) >= 2:
-            for stock in top_stocks:
-                send_telegram_alert(stock["symbol"])
-        else:
-            print("Less than 2 qualifying stocks — no alerts sent.")
+        for stock in top_stocks:
+            send_telegram_alert(stock["symbol"])
 
     except Exception as e:
         print(f"Bot error: {e}")
