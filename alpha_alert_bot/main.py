@@ -2,13 +2,12 @@ import os
 import time
 import threading
 from flask import Flask
-import yfinance as yf
 from SmartApi.smartConnect import SmartConnect
 from SmartApi.smartWebSocketV2 import SmartWebSocketV2
 from nse_token_data_cleaned import nse_tokens
+from screener_scraper import fetch_fundamentals_threaded as get_fundamental_data
 import pyotp
 import requests
-from screener_scraper import fetch_fundamentals_threaded as get_fundamental_data
 
 app = Flask(__name__)
 
@@ -29,17 +28,19 @@ def send_telegram_alert(symbol):
 def hybrid_filters(stock):
     try:
         price = float(stock.get("price", 0))
-        high_52 = float(stock.get("52w High", 0))
+        high_52 = float(stock.get("52w high", 0))
         sma50 = float(stock.get("SMA50", 0))
-        sma_vol = float(stock.get("50MA Volume", 0))
+        sma_vol = float(stock.get("SOMA Volume", 0))
         curr_vol = float(stock.get("Volume", 0))
-        if price > sma50 and price >= 0.9 * high_52 and curr_vol > sma_vol:
+
+        if price > sma50 and price > 0.9 * high_52 and curr_vol > sma_vol:
             return True
     except:
         pass
     return False
 
 def fetch_technical_data(symbols):
+    import yfinance as yf
     data = []
     for symbol in symbols:
         try:
@@ -48,18 +49,20 @@ def fetch_technical_data(symbols):
             hist = stock.history(period="200d")
             if hist.empty:
                 continue
+
             current_price = hist["Close"].iloc[-1]
             high_52 = hist["High"].rolling(window=252).max().iloc[-1]
             sma50 = hist["Close"].rolling(window=50).mean().iloc[-1]
             sma_vol = hist["Volume"].rolling(window=50).mean().iloc[-1]
-            current_vol = hist["Volume"].iloc[-1]
+            curr_vol = hist["Volume"].iloc[-1]
+
             data.append({
                 "symbol": symbol,
                 "price": round(current_price, 2),
-                "52w High": round(high_52, 2),
+                "52w high": round(high_52, 2),
                 "SMA50": round(sma50, 2),
-                "50MA Volume": int(sma_vol),
-                "Volume": int(current_vol),
+                "SOMA Volume": int(sma_vol),
+                "Volume": int(curr_vol)
             })
         except Exception as e:
             print(f"Error fetching {symbol}: {e}")
@@ -74,6 +77,7 @@ def run_bot():
         totp_secret = os.getenv("SMARTAPI_TOTP")
         totp = pyotp.TOTP(totp_secret).now()
         time.sleep(5)
+
         obj = SmartConnect(api_key=api_key)
         data = obj.generateSession(client_code, password, totp)
         token = data["data"]["jwtToken"]
@@ -83,8 +87,8 @@ def run_bot():
         tech = fetch_technical_data(symbols)
         fundamentals = get_fundamental_data(symbols)
 
-        if not fundamentals:
-            print("No fundamentals data received. Skipping scan.")
+        if not tech or not fundamentals:
+            print("Error: One of the data sources returned None or empty.")
             return
 
         combined = []
