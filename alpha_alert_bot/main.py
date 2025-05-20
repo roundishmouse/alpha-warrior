@@ -8,6 +8,8 @@ from nse_token_data_cleaned import nse_tokens
 from screener_scraper import fetch_fundamentals_threaded as get_fundamental_data
 import pyotp
 import requests
+from dotenv import load_dotenv
+load_dotenv()
 
 app = Flask(__name__)
 
