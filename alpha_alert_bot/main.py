@@ -21,7 +21,6 @@ def send_telegram_alert(symbol):
     chat_id = os.getenv("T_BOT_CHAT_ID")
     message = f"ALERT: {symbol} matches criteria"
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-
     try:
         requests.post(url, data={"chat_id": chat_id, "text": message})
     except Exception as e:
@@ -34,8 +33,7 @@ def hybrid_filters(stock):
         sma50 = float(stock.get("SMA50", 0))
         sma_vol = float(stock.get("50MA Volume", 0))
         curr_vol = float(stock.get("Volume", 0))
-
-        if price > sma50 and 0.9 * high_52 <= price <= 1.1 * high_52 and curr_vol > sma_vol:
+        if price > sma50 and price >= 0.9 * high_52 and curr_vol > sma_vol:
             return True
     except:
         pass
@@ -50,13 +48,11 @@ def fetch_technical_data(symbols):
             hist = stock.history(period="200d")
             if hist.empty:
                 continue
-
             current_price = hist["Close"].iloc[-1]
             high_52 = hist["High"].rolling(window=252).max().iloc[-1]
             sma50 = hist["Close"].rolling(window=50).mean().iloc[-1]
             sma_vol = hist["Volume"].rolling(window=50).mean().iloc[-1]
             current_vol = hist["Volume"].iloc[-1]
-
             data.append({
                 "symbol": symbol,
                 "price": round(current_price, 2),
@@ -65,8 +61,6 @@ def fetch_technical_data(symbols):
                 "50MA Volume": int(sma_vol),
                 "Volume": int(current_vol),
             })
-
-            time.sleep(0.1)
         except Exception as e:
             print(f"Error fetching {symbol}: {e}")
     return data
@@ -78,10 +72,8 @@ def run_bot():
         client_code = os.getenv("SMARTAPI_CLIENT_CODE")
         password = os.getenv("SMARTAPI_PASSWORD")
         totp_secret = os.getenv("SMARTAPI_TOTP")
-
         totp = pyotp.TOTP(totp_secret).now()
-        time.sleep(5)  # Wait for TOTP to be valid
-
+        time.sleep(5)
         obj = SmartConnect(api_key=api_key)
         data = obj.generateSession(client_code, password, totp)
         token = data["data"]["jwtToken"]
@@ -90,14 +82,17 @@ def run_bot():
         symbols = [entry["symbol"] for entry in nse_tokens]
         tech = fetch_technical_data(symbols)
         fundamentals = get_fundamental_data(symbols)
-        combined = []
 
-        if fundamentals:
-            for f in fundamentals:
-                match = next((t for t in tech if t["symbol"] == f["symbol"]), None)
-                if match:
-                    match.update(f)
-                    combined.append(match)
+        if not fundamentals:
+            print("No fundamentals data received. Skipping scan.")
+            return
+
+        combined = []
+        for f in fundamentals:
+            match = next((t for t in tech if t["symbol"] == f["symbol"]), None)
+            if match:
+                match.update(f)
+                combined.append(match)
 
         for stock in combined:
             if hybrid_filters(stock):
