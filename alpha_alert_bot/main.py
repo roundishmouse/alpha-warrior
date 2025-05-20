@@ -165,7 +165,7 @@ def run_bot():
 
         scored = [score_stock(s) for s in filtered]
         ranked = sorted(scored, key=lambda x: x["score"], reverse=True)
-        top_stocks = ranked[:5]
+        top_stocks = ranked[:2]
 
         for stock in top_stocks:
             send_telegram_alert(stock)
