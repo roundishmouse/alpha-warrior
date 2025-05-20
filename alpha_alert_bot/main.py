@@ -4,11 +4,10 @@ import math
 import threading
 from flask import Flask
 from SmartApi.smartConnect import SmartConnect
-from SmartApi.smartWebSocketV2 import SmartWebSocketV2
-from nse_token_data_cleaned import nse_tokens
-from screener_scraper import fetch_fundamentals_threaded as get_fundamental_data
 import pyotp
 import requests
+import yfinance as yf
+from nse_token_data_cleaned import nse_tokens
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -22,7 +21,7 @@ def home():
 def send_telegram_alert(symbol):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("T_BOT_CHAT_ID")
-    message = f"ALERT: {symbol} matches criteria"
+    message = f"ALERT: {symbol} matches hybrid filter criteria"
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
         requests.post(url, data={"chat_id": chat_id, "text": message})
@@ -36,50 +35,62 @@ def safe_float(val):
     except:
         return 0
 
-def safe_int(val):
-    try:
-        val = int(float(val))
-        return 0 if math.isnan(val) else val
-    except:
-        return 0
-
 def hybrid_filters(stock):
     try:
         price = safe_float(stock.get("price"))
         high_52 = safe_float(stock.get("52w high"))
-        sma50 = safe_float(stock.get("SMA50"))
+        sma150 = safe_float(stock.get("SMA150"))
         sma_vol = safe_float(stock.get("SOMA Volume"))
         curr_vol = safe_float(stock.get("Volume"))
-        return price > sma50 and price > 0.9 * high_52 and curr_vol > sma_vol
+        return (
+            price > 0.75 * high_52 and
+            price > sma150 and
+            curr_vol > sma_vol
+        )
     except:
         return False
 
 def fetch_technical_data(symbols):
-    import yfinance as yf
     data = []
     for symbol in symbols:
         try:
             yf_symbol = symbol if symbol.endswith(".NS") else symbol + ".NS"
             stock = yf.Ticker(yf_symbol)
-            hist = stock.history(period="200d")
+            hist = stock.history(period="300d")
             if hist.empty:
                 continue
             current_price = hist["Close"].iloc[-1]
             high_52 = hist["High"].rolling(window=252).max().iloc[-1]
-            sma50 = hist["Close"].rolling(window=50).mean().iloc[-1]
+            sma150 = hist["Close"].rolling(window=150).mean().iloc[-1]
             sma_vol = hist["Volume"].rolling(window=50).mean().iloc[-1]
             curr_vol = hist["Volume"].iloc[-1]
             data.append({
                 "symbol": symbol,
                 "price": round(current_price, 2),
                 "52w high": round(high_52, 2),
-                "SMA50": round(sma50, 2),
+                "SMA150": round(sma150, 2),
                 "SOMA Volume": round(sma_vol, 2),
                 "Volume": round(curr_vol, 2),
             })
         except Exception as e:
             print(f"Error fetching {symbol}: {e}")
     return data
+
+def is_market_bullish():
+    try:
+        nifty = yf.Ticker("^NSEI")
+        hist = nifty.history(period="300d")
+        if hist.empty:
+            print("Failed to fetch Nifty data.")
+            return False
+        current = hist["Close"].iloc[-1]
+        sma50 = hist["Close"].rolling(window=50).mean().iloc[-1]
+        sma200 = hist["Close"].rolling(window=200).mean().iloc[-1]
+        print(f"Nifty: {current}, SMA50: {sma50}, SMA200: {sma200}")
+        return current > sma50 and current > sma200
+    except Exception as e:
+        print(f"Error checking market trend: {e}")
+        return False
 
 def run_bot():
     try:
@@ -96,33 +107,25 @@ def run_bot():
         token = data["data"]["jwtToken"]
         print("Login successful.")
 
-        symbols = [entry["symbol"] for entry in nse_tokens]
-        tech = fetch_technical_data(symbols)
-        fundamentals = get_fundamental_data(symbols)
-
-        if not fundamentals:
-            print("No fundamentals data received. Skipping scan.")
+        if not is_market_bullish():
+            print("Market is not bullish. Skipping scan.")
             return
 
-        combined = []
-        for f in fundamentals:
-            match = next((t for t in tech if t["symbol"] == f["symbol"]), None)
-            if match:
-                match.update(f)
-                combined.append(match)
+        symbols = [entry["symbol"] for entry in nse_tokens]
+        print(f"Scanning {len(symbols)} symbols...")
 
-        # Apply filters and score stocks
-        filtered = [s for s in combined if hybrid_filters(s)]
+        tech_data = fetch_technical_data(symbols)
+        filtered = [s for s in tech_data if hybrid_filters(s)]
         ranked = sorted(filtered, key=lambda x: (
-            x["Volume"] * ((x["price"] / x["SMA50"]) + (x["price"] / x["52w high"]))
+            x["Volume"] * ((x["price"] / x["SMA150"]) + (x["price"] / x["52w high"]))
         ), reverse=True)
 
-        top_stocks = ranked[:5]  # Send max 5 alerts if >=2 exist
+        top_stocks = ranked[:5]
         if len(top_stocks) >= 2:
             for stock in top_stocks:
                 send_telegram_alert(stock["symbol"])
         else:
-            print("Less than 2 qualifying stocks — no alert sent.")
+            print("Less than 2 qualifying stocks — no alerts sent.")
 
     except Exception as e:
         print(f"Bot error: {e}")
