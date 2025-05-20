@@ -11,3 +11,4 @@ pyotp
 ntplib
 service_identity
 logzero
+python-dotenv
