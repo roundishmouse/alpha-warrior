@@ -9,7 +9,7 @@ from SmartApi.smartWebSocketV2 import SmartWebSocketV2
 from nse_token_data_cleaned import nse_tokens
 import pyotp
 import requests
-from screener_scraper import fetch_technical_data
+from screener_scraper import fetch_fundamentals_threaded as get_fundamental_data
 
 app = Flask(__name__)
 
