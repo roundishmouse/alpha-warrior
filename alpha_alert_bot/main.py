@@ -11,22 +11,24 @@ import requests
 import yfinance as yf
 from nse_token_data_cleaned import nse_tokens
 from dotenv import load_dotenv
+from trade_manager import auto_buy, get_available_capital, get_open_position_count
 
 load_dotenv()
 
 app = Flask(__name__)
 
 # ============================================================
-# CONFIGURATION — tweak these without touching any other code
+# CONFIGURATION
 # ============================================================
-MIN_SCORE = 7            # Only alert stocks with score >= 7
-MAX_PRICE = 5000         # Ignore stocks above ₹5,000 (PAGEIND problem)
-MIN_VOLUME = 50000       # Minimum daily volume — liquidity filter
-COOLDOWN_DAYS = 7        # Don't re-alert same stock within 7 days
-TOP_N = 2                # Number of top stocks to alert daily
-ALERT_LOG_FILE = "alert_log.json"  # Tracks recently alerted stocks
+MIN_SCORE = 7
+MAX_PRICE = 5000
+MIN_VOLUME = 50000
+COOLDOWN_DAYS = 7
+TOP_N = 2
+ALERT_LOG_FILE = "alert_log.json"
+CAPITAL_PER_TRADE = 50000
+MAX_POSITIONS = 3
 
-# ETF / Bond / Index keywords — these will be filtered out
 ETF_KEYWORDS = [
     "ETF", "BEES", "GSEC", "TBILL", "LIQUID", "GILT",
     "BOND", "NIFTY", "SENSEX", "JUNIOR", "NEXT50",
@@ -34,17 +36,10 @@ ETF_KEYWORDS = [
     "DIVGIT", "BANKBEES", "CPSEETF", "PSUBNKBEES"
 ]
 
-# ============================================================
-# FLASK KEEP-ALIVE — unchanged from original
-# ============================================================
 @app.route("/")
 def home():
     return "Alpha Warrior is running."
 
-
-# ============================================================
-# TELEGRAM ALERT — enhanced with score details
-# ============================================================
 def send_telegram_alert(stock):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("T_BOT_CHAT_ID")
@@ -62,9 +57,7 @@ def send_telegram_alert(stock):
     except Exception as e:
         print(f"Telegram error: {e}")
 
-
 def send_telegram_message(text):
-    """Send any plain text message to Telegram."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("T_BOT_CHAT_ID")
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -73,11 +66,6 @@ def send_telegram_message(text):
     except Exception as e:
         print(f"Telegram error: {e}")
 
-
-# ============================================================
-# CHANGE 1 — 7-DAY COOLDOWN TRACKER
-# Prevents same stock from alerting every day (GVT&D problem)
-# ============================================================
 def load_alert_log():
     try:
         with open(ALERT_LOG_FILE, "r") as f:
@@ -85,14 +73,12 @@ def load_alert_log():
     except:
         return {}
 
-
 def save_alert_log(log):
     try:
         with open(ALERT_LOG_FILE, "w") as f:
             json.dump(log, f, indent=2)
     except Exception as e:
         print(f"Error saving alert log: {e}")
-
 
 def was_recently_alerted(symbol):
     log = load_alert_log()
@@ -103,25 +89,15 @@ def was_recently_alerted(symbol):
             return True
     return False
 
-
 def mark_as_alerted(symbol):
     log = load_alert_log()
     log[symbol] = datetime.now().strftime("%Y-%m-%d")
     save_alert_log(log)
 
-
-# ============================================================
-# CHANGE 2 — ETF / BOND FILTER
-# Removes index ETFs, government bonds, liquid funds
-# ============================================================
 def is_etf_or_bond(symbol):
     sym_upper = symbol.upper()
     return any(keyword in sym_upper for keyword in ETF_KEYWORDS)
 
-
-# ============================================================
-# SAFE FLOAT — unchanged from original
-# ============================================================
 def safe_float(val):
     try:
         val = float(val)
@@ -129,35 +105,20 @@ def safe_float(val):
     except:
         return 0
 
-
-# ============================================================
-# CHANGE 3 — ENHANCED HYBRID FILTERS
-# Added: price cap, min volume, ETF filter
-# ============================================================
 def hybrid_filters(stock):
     try:
         symbol = stock.get("symbol", "")
-
-        # CHANGE 3a: Filter ETFs and bonds
         if is_etf_or_bond(symbol):
             return False
-
         price = safe_float(stock.get("price"))
-
-        # CHANGE 3b: Price cap — ignore stocks above ₹5,000
         if price <= 0 or price > MAX_PRICE:
             return False
-
         high_52 = safe_float(stock.get("52w high"))
         sma150 = safe_float(stock.get("SMA150"))
         sma_vol = safe_float(stock.get("SOMA Volume"))
         curr_vol = safe_float(stock.get("Volume"))
-
-        # CHANGE 3c: Minimum volume filter — liquidity check
         if curr_vol < MIN_VOLUME:
             return False
-
-        # Original filters — unchanged
         return (
             price > 0.75 * high_52 and
             price > sma150 and
@@ -166,10 +127,6 @@ def hybrid_filters(stock):
     except:
         return False
 
-
-# ============================================================
-# SCORE STOCK — unchanged from original (it's good as is)
-# ============================================================
 def score_stock(stock):
     score = 0
     price = stock["price"]
@@ -179,36 +136,25 @@ def score_stock(stock):
     sma150 = stock["SMA150"]
     vol = stock["Volume"]
     vol50 = stock["SOMA Volume"]
-
-    # Price within 5% of 52w high
     proximity = price / high_52 if high_52 else 0
     if proximity >= 0.95:
         score += 2
     elif proximity >= 0.90:
         score += 1
-
-    # Price above moving averages
     if price > sma20:
         score += 1
     if price > sma50:
         score += 1
     if price > sma150:
         score += 1
-
-    # Volume strength
     vol_ratio = vol / vol50 if vol50 else 0
     if vol_ratio > 2:
         score += 2
     elif vol_ratio > 1.5:
         score += 1
-
     stock["score"] = score
     return stock
 
-
-# ============================================================
-# FETCH TECHNICAL DATA — unchanged from original
-# ============================================================
 def fetch_technical_data(symbols):
     data = []
     for idx, symbol in enumerate(symbols):
@@ -240,13 +186,6 @@ def fetch_technical_data(symbols):
             print(f"Error fetching {symbol}: {e}")
     return data
 
-
-# ============================================================
-# CHANGE 4 — SWITCHED SMA200 → EMA200 FOR MARKET CHECK
-# EMA reacts faster to price changes — catches bull market earlier
-# Minervini himself uses EMA200 for market direction
-# SMA200 was at 25,002 — EMA200 is at 23,815 (already bullish!)
-# ============================================================
 def is_market_bullish():
     try:
         nifty = yf.Ticker("^NSEI")
@@ -254,34 +193,22 @@ def is_market_bullish():
         if hist.empty:
             print("Failed to fetch Nifty data.")
             return False
-
         current = hist["Close"].iloc[-1]
         sma50 = hist["Close"].rolling(window=50).mean().iloc[-1]
-
-        # CHANGE 4: EMA200 instead of SMA200
         ema200 = hist["Close"].ewm(span=200, adjust=False).mean().iloc[-1]
-
         print(f"Nifty: {round(current, 2)}, SMA50: {round(sma50, 2)}, EMA200: {round(ema200, 2)}")
-
         is_bullish = current > sma50 and current > ema200
         print(f"Market is {'BULLISH ✅' if is_bullish else 'NOT bullish ❌'}")
         return is_bullish
-
     except Exception as e:
         print(f"Error checking market trend: {e}")
         return False
 
-
-# ============================================================
-# MAIN BOT LOGIC
-# ============================================================
 def run_bot():
     try:
         print("=" * 50)
-        print(f"Alpha Warrior starting — {datetime.now().strftime('%d-%b-%Y %H:%M')}")
+        print(f"Alpha Warrior — {datetime.now().strftime('%d-%b-%Y %H:%M')}")
         print("=" * 50)
-
-        # Login to Angel One — unchanged
         print("Logging in to SmartAPI...")
         api_key = os.getenv("SMARTAPI_API_KEY")
         client_code = os.getenv("SMARTAPI_CLIENT_CODE")
@@ -289,84 +216,89 @@ def run_bot():
         totp_secret = os.getenv("SMARTAPI_TOTP")
         totp = pyotp.TOTP(totp_secret).now()
         time.sleep(5)
-
         obj = SmartConnect(api_key=api_key)
-        data = obj.generateSession(client_code, password, totp)
+        obj.generateSession(client_code, password, totp)
         print("Login successful.")
 
-        # CHANGE 4: Market check now uses EMA200
         if not is_market_bullish():
             print("Market is not bullish. Skipping scan.")
             send_telegram_message(
-                f"⚠️ Alpha Warrior: Market not bullish today ({datetime.now().strftime('%d-%b-%Y')}). No scan."
+                f"⚠️ Alpha Warrior: Market not bullish ({datetime.now().strftime('%d-%b-%Y')}). No scan."
             )
             return
 
-        # Fetch and filter
+        available = get_available_capital()
+        open_count = get_open_position_count()
+        print(f"Available capital: ₹{available:,.0f}")
+        print(f"Open positions: {open_count}/{MAX_POSITIONS}")
+
+        if available < CAPITAL_PER_TRADE:
+            msg = f"⚠️ Alpha Warrior: Insufficient capital (₹{available:,.0f}). Need ₹{CAPITAL_PER_TRADE:,.0f}."
+            print(msg)
+            send_telegram_message(msg)
+            return
+
+        if open_count >= MAX_POSITIONS:
+            msg = f"⚠️ Alpha Warrior: Max {MAX_POSITIONS} positions open. Waiting for exit."
+            print(msg)
+            send_telegram_message(msg)
+            return
+
         symbols = [entry["symbol"] for entry in nse_tokens]
         print(f"Scanning {len(symbols)} symbols...")
-
         tech_data = fetch_technical_data(symbols)
         print(f"Technical data fetched: {len(tech_data)}")
-
-        # CHANGE 3: Enhanced filters (ETF + price cap + volume)
         filtered = [s for s in tech_data if hybrid_filters(s)]
         print(f"Stocks after hybrid filter: {len(filtered)}")
 
         if not filtered:
             print("No stocks matched today.")
             send_telegram_message(
-                f"ℹ️ Alpha Warrior: No stocks matched filters today ({datetime.now().strftime('%d-%b-%Y')})."
+                f"ℹ️ Alpha Warrior: No stocks matched filters ({datetime.now().strftime('%d-%b-%Y')})."
             )
             return
 
-        # Score all filtered stocks
         scored = [score_stock(s) for s in filtered]
-
-        # CHANGE 2: Only keep score >= MIN_SCORE (7)
         high_quality = [s for s in scored if s["score"] >= MIN_SCORE]
         print(f"Stocks with score >= {MIN_SCORE}: {len(high_quality)}")
 
         if not high_quality:
             print(f"No stocks scored >= {MIN_SCORE} today.")
-            send_telegram_message(
-                f"ℹ️ Alpha Warrior: {len(scored)} stocks passed filters but none scored >= {MIN_SCORE} today."
-            )
+            send_telegram_message(f"ℹ️ Alpha Warrior: No stocks scored >= {MIN_SCORE} today.")
             return
 
-        # Rank by score
         ranked = sorted(high_quality, key=lambda x: x["score"], reverse=True)
-
-        # CHANGE 1: Apply 7-day cooldown filter
         fresh_picks = [s for s in ranked if not was_recently_alerted(s["symbol"])]
-        print(f"Fresh picks (not recently alerted): {len(fresh_picks)}")
 
         if not fresh_picks:
-            print("All top picks were recently alerted. No new alerts today.")
-            send_telegram_message(
-                f"ℹ️ Alpha Warrior: All picks were recently alerted. No new alerts today."
-            )
+            print("All picks recently alerted.")
+            send_telegram_message("ℹ️ Alpha Warrior: All picks recently alerted. No new trades today.")
             return
 
-        # Take top N
-        top_stocks = fresh_picks[:TOP_N]
+        slots_available = MAX_POSITIONS - open_count
+        top_stocks = fresh_picks[:min(TOP_N, slots_available)]
 
-        # Send alerts
         for stock in top_stocks:
+            symbol = stock["symbol"]
+            price = stock["price"]
             send_telegram_alert(stock)
-            mark_as_alerted(stock["symbol"])
-            print(f"✅ Sent alert for {stock['symbol']} (Score: {stock['score']})")
+            mark_as_alerted(symbol)
+            print(f"✅ Alert sent for {symbol} (Score: {stock['score']})")
+            print(f"🔵 Initiating auto buy for {symbol}...")
+            time.sleep(3)
+            success = auto_buy(symbol, price)
+            if success:
+                print(f"✅ Auto buy successful for {symbol}")
+            else:
+                print(f"❌ Auto buy failed for {symbol}")
 
-        print(f"Done! Alerted {len(top_stocks)} stock(s) today.")
+        print(f"\nDone! Processed {len(top_stocks)} stock(s) today.")
 
     except Exception as e:
-        print(f"Bot error: {e}")
-        send_telegram_message(f"❌ Alpha Warrior error: {e}")
+        error_msg = f"❌ Alpha Warrior error: {e}"
+        print(error_msg)
+        send_telegram_message(error_msg)
 
-
-# ============================================================
-# ENTRY POINT — unchanged from original
-# ============================================================
 if __name__ == "__main__":
     threading.Thread(target=run_bot).start()
     app.run(host="0.0.0.0", port=10000)
