@@ -36,10 +36,17 @@ ETF_KEYWORDS = [
     "DIVGIT", "BANKBEES", "CPSEETF", "PSUBNKBEES"
 ]
 
+# ============================================================
+# FLASK KEEP-ALIVE
+# ============================================================
 @app.route("/")
 def home():
     return "Alpha Warrior is running."
 
+
+# ============================================================
+# TELEGRAM
+# ============================================================
 def send_telegram_alert(stock):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("T_BOT_CHAT_ID")
@@ -57,6 +64,7 @@ def send_telegram_alert(stock):
     except Exception as e:
         print(f"Telegram error: {e}")
 
+
 def send_telegram_message(text):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("T_BOT_CHAT_ID")
@@ -66,6 +74,10 @@ def send_telegram_message(text):
     except Exception as e:
         print(f"Telegram error: {e}")
 
+
+# ============================================================
+# COOLDOWN TRACKER
+# ============================================================
 def load_alert_log():
     try:
         with open(ALERT_LOG_FILE, "r") as f:
@@ -73,12 +85,14 @@ def load_alert_log():
     except:
         return {}
 
+
 def save_alert_log(log):
     try:
         with open(ALERT_LOG_FILE, "w") as f:
             json.dump(log, f, indent=2)
     except Exception as e:
         print(f"Error saving alert log: {e}")
+
 
 def was_recently_alerted(symbol):
     log = load_alert_log()
@@ -89,15 +103,24 @@ def was_recently_alerted(symbol):
             return True
     return False
 
+
 def mark_as_alerted(symbol):
     log = load_alert_log()
     log[symbol] = datetime.now().strftime("%Y-%m-%d")
     save_alert_log(log)
 
+
+# ============================================================
+# ETF FILTER
+# ============================================================
 def is_etf_or_bond(symbol):
     sym_upper = symbol.upper()
     return any(keyword in sym_upper for keyword in ETF_KEYWORDS)
 
+
+# ============================================================
+# SAFE FLOAT
+# ============================================================
 def safe_float(val):
     try:
         val = float(val)
@@ -105,6 +128,10 @@ def safe_float(val):
     except:
         return 0
 
+
+# ============================================================
+# HYBRID FILTERS
+# ============================================================
 def hybrid_filters(stock):
     try:
         symbol = stock.get("symbol", "")
@@ -127,6 +154,10 @@ def hybrid_filters(stock):
     except:
         return False
 
+
+# ============================================================
+# SCORE STOCK
+# ============================================================
 def score_stock(stock):
     score = 0
     price = stock["price"]
@@ -136,25 +167,33 @@ def score_stock(stock):
     sma150 = stock["SMA150"]
     vol = stock["Volume"]
     vol50 = stock["SOMA Volume"]
+
     proximity = price / high_52 if high_52 else 0
     if proximity >= 0.95:
         score += 2
     elif proximity >= 0.90:
         score += 1
+
     if price > sma20:
         score += 1
     if price > sma50:
         score += 1
     if price > sma150:
         score += 1
+
     vol_ratio = vol / vol50 if vol50 else 0
     if vol_ratio > 2:
         score += 2
     elif vol_ratio > 1.5:
         score += 1
+
     stock["score"] = score
     return stock
 
+
+# ============================================================
+# FETCH TECHNICAL DATA
+# ============================================================
 def fetch_technical_data(symbols):
     data = []
     for idx, symbol in enumerate(symbols):
@@ -186,6 +225,10 @@ def fetch_technical_data(symbols):
             print(f"Error fetching {symbol}: {e}")
     return data
 
+
+# ============================================================
+# MARKET CONDITION — EMA200
+# ============================================================
 def is_market_bullish():
     try:
         nifty = yf.Ticker("^NSEI")
@@ -204,11 +247,17 @@ def is_market_bullish():
         print(f"Error checking market trend: {e}")
         return False
 
+
+# ============================================================
+# MAIN BOT
+# ============================================================
 def run_bot():
     try:
         print("=" * 50)
         print(f"Alpha Warrior — {datetime.now().strftime('%d-%b-%Y %H:%M')}")
         print("=" * 50)
+
+        # Angel One login
         print("Logging in to SmartAPI...")
         api_key = os.getenv("SMARTAPI_API_KEY")
         client_code = os.getenv("SMARTAPI_CLIENT_CODE")
@@ -220,41 +269,65 @@ def run_bot():
         obj.generateSession(client_code, password, totp)
         print("Login successful.")
 
+        # ✅ LOGIN CONFIRMATION ON TELEGRAM
+        send_telegram_message(
+            f"✅ Alpha Warrior Online!\n"
+            f"Angel One login successful\n"
+            f"📅 {datetime.now().strftime('%d-%b-%Y %H:%M')}\n"
+            f"🔍 Nifty scanning started..."
+        )
+
+        # Market check
         if not is_market_bullish():
             print("Market is not bullish. Skipping scan.")
             send_telegram_message(
-                f"⚠️ Alpha Warrior: Market not bullish ({datetime.now().strftime('%d-%b-%Y')}). No scan."
+                f"⚠️ Market not bullish ({datetime.now().strftime('%d-%b-%Y')})\n"
+                f"Nifty below SMA50 or EMA200\n"
+                f"No trades today. See you tomorrow! 🕐"
             )
             return
 
+        # Capital and position check
         available = get_available_capital()
         open_count = get_open_position_count()
         print(f"Available capital: ₹{available:,.0f}")
         print(f"Open positions: {open_count}/{MAX_POSITIONS}")
 
         if available < CAPITAL_PER_TRADE:
-            msg = f"⚠️ Alpha Warrior: Insufficient capital (₹{available:,.0f}). Need ₹{CAPITAL_PER_TRADE:,.0f}."
+            msg = (
+                f"⚠️ Insufficient capital!\n"
+                f"Available: ₹{available:,.0f}\n"
+                f"Need: ₹{CAPITAL_PER_TRADE:,.0f}\n"
+                f"Waiting for position to close..."
+            )
             print(msg)
             send_telegram_message(msg)
             return
 
         if open_count >= MAX_POSITIONS:
-            msg = f"⚠️ Alpha Warrior: Max {MAX_POSITIONS} positions open. Waiting for exit."
+            msg = (
+                f"⚠️ Max positions reached!\n"
+                f"Open: {open_count}/{MAX_POSITIONS}\n"
+                f"Waiting for exit before new trade..."
+            )
             print(msg)
             send_telegram_message(msg)
             return
 
+        # Scan stocks
         symbols = [entry["symbol"] for entry in nse_tokens]
         print(f"Scanning {len(symbols)} symbols...")
         tech_data = fetch_technical_data(symbols)
         print(f"Technical data fetched: {len(tech_data)}")
+
         filtered = [s for s in tech_data if hybrid_filters(s)]
         print(f"Stocks after hybrid filter: {len(filtered)}")
 
         if not filtered:
             print("No stocks matched today.")
             send_telegram_message(
-                f"ℹ️ Alpha Warrior: No stocks matched filters ({datetime.now().strftime('%d-%b-%Y')})."
+                f"ℹ️ No stocks matched filters today\n"
+                f"({datetime.now().strftime('%d-%b-%Y')})"
             )
             return
 
@@ -264,7 +337,10 @@ def run_bot():
 
         if not high_quality:
             print(f"No stocks scored >= {MIN_SCORE} today.")
-            send_telegram_message(f"ℹ️ Alpha Warrior: No stocks scored >= {MIN_SCORE} today.")
+            send_telegram_message(
+                f"ℹ️ No stocks scored >= {MIN_SCORE} today\n"
+                f"Market bullish but no quality setups"
+            )
             return
 
         ranked = sorted(high_quality, key=lambda x: x["score"], reverse=True)
@@ -272,7 +348,10 @@ def run_bot():
 
         if not fresh_picks:
             print("All picks recently alerted.")
-            send_telegram_message("ℹ️ Alpha Warrior: All picks recently alerted. No new trades today.")
+            send_telegram_message(
+                f"ℹ️ All top picks alerted within last {COOLDOWN_DAYS} days\n"
+                f"No new trades today"
+            )
             return
 
         slots_available = MAX_POSITIONS - open_count
@@ -281,16 +360,22 @@ def run_bot():
         for stock in top_stocks:
             symbol = stock["symbol"]
             price = stock["price"]
+
+            # Send alert
             send_telegram_alert(stock)
             mark_as_alerted(symbol)
             print(f"✅ Alert sent for {symbol} (Score: {stock['score']})")
+
+            # Auto buy
             print(f"🔵 Initiating auto buy for {symbol}...")
             time.sleep(3)
             success = auto_buy(symbol, price)
+
             if success:
                 print(f"✅ Auto buy successful for {symbol}")
             else:
                 print(f"❌ Auto buy failed for {symbol}")
+                send_telegram_message(f"❌ Auto buy FAILED for {symbol}. Please check manually!")
 
         print(f"\nDone! Processed {len(top_stocks)} stock(s) today.")
 
@@ -299,6 +384,10 @@ def run_bot():
         print(error_msg)
         send_telegram_message(error_msg)
 
+
+# ============================================================
+# ENTRY POINT
+# ============================================================
 if __name__ == "__main__":
     threading.Thread(target=run_bot).start()
     app.run(host="0.0.0.0", port=10000)
