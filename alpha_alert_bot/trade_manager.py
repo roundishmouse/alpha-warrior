@@ -10,18 +10,22 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ============================================================
-# CONFIGURATION — All settings in one place
+# CONFIGURATION
 # ============================================================
-CAPITAL_PER_TRADE = 50000       # ₹50,000 per trade
-MAX_POSITIONS = 3               # Maximum 3 open positions at once
-STOP_LOSS_PCT = 0.08            # -8% stop loss (O'Neil rule)
-TARGET_PCT = 0.20               # +20% profit target
-QUICK_MOVE_WEEKS = 3            # If +20% within 3 weeks → hold 8 weeks
-MAX_HOLD_WEEKS = 8              # Maximum hold period (O'Neil rule)
 POSITIONS_FILE = "positions.json"
 EXCHANGE = "NSE"
-PRODUCT_TYPE = "DELIVERY"       # CNC — hold for weeks/months
-ORDER_TYPE = "MARKET"           # Market order for instant execution
+PRODUCT_TYPE = "DELIVERY"
+ORDER_TYPE = "MARKET"
+
+# Stop loss per mode
+STOP_LOSS = {
+    "BULL": 0.08,   # -8% in bull mode
+    "HUNT": 0.06,   # -6% in hunt mode (tighter!)
+}
+
+TARGET_PCT = 0.20           # +20% target both modes
+QUICK_MOVE_WEEKS = 3
+MAX_HOLD_WEEKS = 8
 
 
 # ============================================================
@@ -40,7 +44,7 @@ def get_angel_one_session():
         print("✅ Angel One login successful")
         return obj
     except Exception as e:
-        print(f"❌ Angel One login failed: {e}")
+        print(f"❌ Login failed: {e}")
         return None
 
 
@@ -59,20 +63,20 @@ def send_telegram(message):
 
 # ============================================================
 # POSITIONS MANAGER
-# Reads and writes positions.json
 # ============================================================
 def load_positions():
     try:
         with open(POSITIONS_FILE, "r") as f:
             return json.load(f)
     except:
-        # First time — create fresh positions file
         default = {
-            "available_capital": 149633,
+            "available_capital": 150976,
             "deployed_capital": 0,
             "open_positions": [],
             "closed_positions": [],
-            "total_realized_pnl": 0
+            "total_realized_pnl": 0,
+            "bull_trades": 0,
+            "hunt_trades": 0
         }
         save_positions(default)
         return default
@@ -83,21 +87,19 @@ def save_positions(data):
         with open(POSITIONS_FILE, "w") as f:
             json.dump(data, f, indent=2)
     except Exception as e:
-        print(f"Error saving positions: {e}")
+        print(f"Error saving: {e}")
 
 
 def get_open_position_count():
-    data = load_positions()
-    return len(data["open_positions"])
+    return len(load_positions()["open_positions"])
 
 
 def get_available_capital():
-    data = load_positions()
-    return data["available_capital"]
+    return load_positions()["available_capital"]
 
 
 # ============================================================
-# GET TOKEN FOR SYMBOL
+# GET TOKEN
 # ============================================================
 def get_token_for_symbol(symbol):
     from nse_token_data_cleaned import nse_tokens
@@ -115,35 +117,27 @@ def get_live_price(obj, symbol, token):
         ltp_data = obj.ltpData(EXCHANGE, symbol, token)
         return float(ltp_data["data"]["ltp"])
     except Exception as e:
-        print(f"Error getting LTP for {symbol}: {e}")
+        print(f"Error getting LTP: {e}")
         return None
 
 
 # ============================================================
-# AUTO BUY
+# AUTO BUY — MODE AWARE
 # ============================================================
-def auto_buy(symbol, alert_price):
+def auto_buy(symbol, alert_price, capital_per_trade, mode="BULL"):
     print(f"\n{'='*50}")
-    print(f"🔵 AUTO BUY triggered for {symbol}")
+    print(f"🔵 AUTO BUY [{mode} MODE] — {symbol}")
     print(f"{'='*50}")
 
-    # Check available capital
+    # Capital check
     available = get_available_capital()
-    if available < CAPITAL_PER_TRADE:
+    if available < capital_per_trade:
         msg = f"⚠️ Insufficient capital for {symbol}. Available: ₹{available:,.0f}"
         print(msg)
         send_telegram(msg)
         return False
 
-    # Check max positions
-    open_count = get_open_position_count()
-    if open_count >= MAX_POSITIONS:
-        msg = f"⚠️ Max positions ({MAX_POSITIONS}) reached. Cannot buy {symbol}."
-        print(msg)
-        send_telegram(msg)
-        return False
-
-    # Get token
+    # Token
     token = get_token_for_symbol(symbol)
     if not token:
         print(f"❌ Token not found for {symbol}")
@@ -154,30 +148,29 @@ def auto_buy(symbol, alert_price):
     if not obj:
         return False
 
-    # Get live price
+    # Live price
     live_price = get_live_price(obj, symbol, token)
     if not live_price:
-        print(f"❌ Could not get live price for {symbol}")
         return False
 
-    # Calculate quantity
-    quantity = int(CAPITAL_PER_TRADE / live_price)
+    # Quantity
+    quantity = int(capital_per_trade / live_price)
     if quantity < 1:
-        print(f"❌ Cannot buy even 1 share of {symbol} at ₹{live_price}")
+        print(f"❌ Cannot buy even 1 share at ₹{live_price}")
         return False
 
     actual_amount = quantity * live_price
-    stop_loss_price = round(live_price * (1 - STOP_LOSS_PCT), 2)
+    stop_loss_pct = STOP_LOSS.get(mode, 0.08)
+    stop_loss_price = round(live_price * (1 - stop_loss_pct), 2)
     target_price = round(live_price * (1 + TARGET_PCT), 2)
 
-    print(f"Symbol: {symbol}")
-    print(f"Live Price: ₹{live_price}")
-    print(f"Quantity: {quantity}")
+    print(f"Mode: {mode}")
+    print(f"Price: ₹{live_price}")
+    print(f"Qty: {quantity}")
     print(f"Amount: ₹{actual_amount:,.0f}")
-    print(f"Stop Loss: ₹{stop_loss_price} (-8%)")
+    print(f"Stop Loss: ₹{stop_loss_price} ({int(stop_loss_pct*100)}%)")
     print(f"Target: ₹{target_price} (+20%)")
 
-    # Place buy order
     try:
         order_params = {
             "variety": "NORMAL",
@@ -192,38 +185,47 @@ def auto_buy(symbol, alert_price):
         }
         order_response = obj.placeOrder(order_params)
         order_id = order_response["data"]["orderid"]
-        print(f"✅ Buy order placed! Order ID: {order_id}")
+        print(f"✅ Order placed! ID: {order_id}")
 
         # Save position
         data = load_positions()
         position = {
             "symbol": symbol,
             "token": token,
+            "mode": mode,
             "buy_price": live_price,
             "quantity": quantity,
             "amount_invested": actual_amount,
             "stop_loss": stop_loss_price,
+            "stop_loss_pct": stop_loss_pct,
             "target": target_price,
             "buy_date": datetime.now().strftime("%Y-%m-%d"),
             "buy_time": datetime.now().strftime("%H:%M:%S"),
             "order_id": order_id,
             "status": "OPEN",
-            "quick_move": False,        # Will be set True if +20% in < 3 weeks
-            "hold_till": None           # Will be set if quick move detected
+            "quick_move": False,
+            "hold_till": None
         }
         data["open_positions"].append(position)
         data["available_capital"] -= actual_amount
         data["deployed_capital"] += actual_amount
+
+        # Track mode stats
+        if mode == "BULL":
+            data["bull_trades"] = data.get("bull_trades", 0) + 1
+        else:
+            data["hunt_trades"] = data.get("hunt_trades", 0) + 1
+
         save_positions(data)
 
-        # Telegram notification
+        mode_emoji = "🚀" if mode == "BULL" else "🎯"
         msg = (
-            f"🟢 AUTO BUY EXECUTED!\n"
+            f"{mode_emoji} AUTO BUY [{mode}] EXECUTED!\n"
             f"Stock: {symbol}\n"
             f"Price: ₹{live_price}\n"
             f"Qty: {quantity} shares\n"
             f"Invested: ₹{actual_amount:,.0f}\n"
-            f"Stop Loss: ₹{stop_loss_price} (-8%)\n"
+            f"Stop Loss: ₹{stop_loss_price} (-{int(stop_loss_pct*100)}%)\n"
             f"Target: ₹{target_price} (+20%)\n"
             f"Date: {datetime.now().strftime('%d-%b-%Y %H:%M')}\n"
             f"Capital Remaining: ₹{data['available_capital']:,.0f}"
@@ -232,7 +234,7 @@ def auto_buy(symbol, alert_price):
         return True
 
     except Exception as e:
-        error_msg = f"❌ Buy order FAILED for {symbol}: {e}"
+        error_msg = f"❌ Buy FAILED for {symbol}: {e}"
         print(error_msg)
         send_telegram(error_msg)
         return False
@@ -246,18 +248,17 @@ def auto_sell(position, reason):
     token = position["token"]
     quantity = position["quantity"]
     buy_price = position["buy_price"]
+    mode = position.get("mode", "BULL")
 
     print(f"\n{'='*50}")
-    print(f"🔴 AUTO SELL triggered for {symbol}")
+    print(f"🔴 AUTO SELL [{mode}] — {symbol}")
     print(f"Reason: {reason}")
     print(f"{'='*50}")
 
-    # Login
     obj = get_angel_one_session()
     if not obj:
         return False
 
-    # Get live price
     live_price = get_live_price(obj, symbol, token)
     if not live_price:
         return False
@@ -265,11 +266,6 @@ def auto_sell(position, reason):
     pnl = (live_price - buy_price) * quantity
     pnl_pct = ((live_price - buy_price) / buy_price) * 100
 
-    print(f"Buy Price: ₹{buy_price}")
-    print(f"Sell Price: ₹{live_price}")
-    print(f"P&L: ₹{pnl:,.0f} ({pnl_pct:.2f}%)")
-
-    # Place sell order
     try:
         order_params = {
             "variety": "NORMAL",
@@ -284,13 +280,11 @@ def auto_sell(position, reason):
         }
         order_response = obj.placeOrder(order_params)
         order_id = order_response["data"]["orderid"]
-        print(f"✅ Sell order placed! Order ID: {order_id}")
 
         # Update positions
         data = load_positions()
         sell_amount = live_price * quantity
 
-        # Move to closed positions
         position["sell_price"] = live_price
         position["sell_date"] = datetime.now().strftime("%Y-%m-%d")
         position["sell_time"] = datetime.now().strftime("%H:%M:%S")
@@ -310,24 +304,26 @@ def auto_sell(position, reason):
         data["total_realized_pnl"] += round(pnl, 2)
         save_positions(data)
 
-        # Telegram
         emoji = "🟢" if pnl > 0 else "🔴"
+        mode_emoji = "🚀" if mode == "BULL" else "🎯"
         msg = (
-            f"{emoji} AUTO SELL EXECUTED!\n"
+            f"{emoji} AUTO SELL [{mode}] EXECUTED!\n"
             f"Stock: {symbol}\n"
             f"Buy: ₹{buy_price} → Sell: ₹{live_price}\n"
             f"Qty: {quantity} shares\n"
             f"P&L: ₹{pnl:,.0f} ({pnl_pct:.2f}%)\n"
             f"Reason: {reason}\n"
             f"Date: {datetime.now().strftime('%d-%b-%Y %H:%M')}\n"
-            f"Total Realized P&L: ₹{data['total_realized_pnl']:,.0f}\n"
-            f"Available Capital: ₹{data['available_capital']:,.0f}"
+            f"Total P&L: ₹{data['total_realized_pnl']:,.0f}\n"
+            f"Available: ₹{data['available_capital']:,.0f}\n"
+            f"Bull trades: {data.get('bull_trades', 0)} | "
+            f"Hunt trades: {data.get('hunt_trades', 0)}"
         )
         send_telegram(msg)
         return True
 
     except Exception as e:
-        error_msg = f"❌ Sell order FAILED for {symbol}: {e}"
+        error_msg = f"❌ Sell FAILED for {symbol}: {e}"
         print(error_msg)
         send_telegram(error_msg)
         return False
