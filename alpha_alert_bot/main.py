@@ -28,6 +28,7 @@ TOP_N = 2
 ALERT_LOG_FILE = "alert_log.json"
 CAPITAL_PER_TRADE = 50000
 MAX_POSITIONS = 3
+MAX_PREV_DAY_MOVE = 5.0  # NEW: Skip if stock moved >5% yesterday
 
 ETF_KEYWORDS = [
     "ETF", "BEES", "GSEC", "TBILL", "LIQUID", "GILT",
@@ -56,6 +57,7 @@ def send_telegram_alert(stock):
         f"⭐ Score: {stock['score']:.2f}/7\n"
         f"📈 52W High: ₹{stock['52w high']}\n"
         f"📊 Vol Ratio: {round(stock['Volume'] / stock['SOMA Volume'], 2) if stock['SOMA Volume'] else 'N/A'}x\n"
+        f"📉 Prev Day Move: {stock.get('prev_day_move', 0):.2f}%\n"
         f"🕐 {datetime.now().strftime('%d-%b-%Y %H:%M')}"
     )
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -130,22 +132,39 @@ def safe_float(val):
 
 
 # ============================================================
-# HYBRID FILTERS
+# HYBRID FILTERS — with NEW 5% previous day move filter
 # ============================================================
 def hybrid_filters(stock):
     try:
         symbol = stock.get("symbol", "")
+
+        # Filter ETFs and bonds
         if is_etf_or_bond(symbol):
             return False
+
         price = safe_float(stock.get("price"))
+
+        # Price cap
         if price <= 0 or price > MAX_PRICE:
             return False
+
         high_52 = safe_float(stock.get("52w high"))
         sma150 = safe_float(stock.get("SMA150"))
         sma_vol = safe_float(stock.get("SOMA Volume"))
         curr_vol = safe_float(stock.get("Volume"))
+
+        # Minimum volume filter
         if curr_vol < MIN_VOLUME:
             return False
+
+        # NEW: Previous day move filter — skip if moved >5% yesterday
+        # Prevents chasing stocks that already made big moves
+        prev_day_move = safe_float(stock.get("prev_day_move", 0))
+        if prev_day_move > MAX_PREV_DAY_MOVE:
+            print(f"  ⏩ {symbol} moved {prev_day_move:.1f}% yesterday — skipping (chasing filter)")
+            return False
+
+        # Original filters — unchanged
         return (
             price > 0.75 * high_52 and
             price > sma150 and
@@ -156,7 +175,7 @@ def hybrid_filters(stock):
 
 
 # ============================================================
-# SCORE STOCK
+# SCORE STOCK — unchanged
 # ============================================================
 def score_stock(stock):
     score = 0
@@ -192,7 +211,7 @@ def score_stock(stock):
 
 
 # ============================================================
-# FETCH TECHNICAL DATA
+# FETCH TECHNICAL DATA — NEW: adds prev_day_move calculation
 # ============================================================
 def fetch_technical_data(symbols):
     data = []
@@ -205,15 +224,21 @@ def fetch_technical_data(symbols):
             if hist.empty:
                 continue
             current_price = hist["Close"].iloc[-1]
+            prev_price = hist["Close"].iloc[-2]
             high_52 = hist["High"].rolling(window=252).max().iloc[-1]
             sma20 = hist["Close"].rolling(window=20).mean().iloc[-1]
             sma50 = hist["Close"].rolling(window=50).mean().iloc[-1]
             sma150 = hist["Close"].rolling(window=150).mean().iloc[-1]
             sma_vol = hist["Volume"].rolling(window=50).mean().iloc[-1]
             curr_vol = hist["Volume"].iloc[-1]
+
+            # NEW: Calculate previous day move %
+            prev_day_move = ((current_price - prev_price) / prev_price) * 100
+
             data.append({
                 "symbol": symbol,
                 "price": round(current_price, 2),
+                "prev_day_move": round(prev_day_move, 2),  # NEW
                 "52w high": round(high_52, 2),
                 "SMA20": round(sma20, 2),
                 "SMA50": round(sma50, 2),
@@ -257,7 +282,6 @@ def run_bot():
         print(f"Alpha Warrior — {datetime.now().strftime('%d-%b-%Y %H:%M')}")
         print("=" * 50)
 
-        # Angel One login
         print("Logging in to SmartAPI...")
         api_key = os.getenv("SMARTAPI_API_KEY")
         client_code = os.getenv("SMARTAPI_CLIENT_CODE")
@@ -269,7 +293,7 @@ def run_bot():
         obj.generateSession(client_code, password, totp)
         print("Login successful.")
 
-        # ✅ LOGIN CONFIRMATION ON TELEGRAM
+        # Login confirmation
         send_telegram_message(
             f"✅ Alpha Warrior Online!\n"
             f"Angel One login successful\n"
@@ -287,7 +311,7 @@ def run_bot():
             )
             return
 
-        # Capital and position check
+        # Capital check
         available = get_available_capital()
         open_count = get_open_position_count()
         print(f"Available capital: ₹{available:,.0f}")
@@ -314,7 +338,7 @@ def run_bot():
             send_telegram_message(msg)
             return
 
-        # Scan stocks
+        # Scan
         symbols = [entry["symbol"] for entry in nse_tokens]
         print(f"Scanning {len(symbols)} symbols...")
         tech_data = fetch_technical_data(symbols)
@@ -360,17 +384,12 @@ def run_bot():
         for stock in top_stocks:
             symbol = stock["symbol"]
             price = stock["price"]
-
-            # Send alert
             send_telegram_alert(stock)
             mark_as_alerted(symbol)
-            print(f"✅ Alert sent for {symbol} (Score: {stock['score']})")
-
-            # Auto buy
+            print(f"✅ Alert sent for {symbol} (Score: {stock['score']}, Prev move: {stock.get('prev_day_move', 0):.1f}%)")
             print(f"🔵 Initiating auto buy for {symbol}...")
             time.sleep(3)
             success = auto_buy(symbol, price)
-
             if success:
                 print(f"✅ Auto buy successful for {symbol}")
             else:
