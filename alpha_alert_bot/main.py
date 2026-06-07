@@ -20,15 +20,26 @@ app = Flask(__name__)
 # ============================================================
 # CONFIGURATION
 # ============================================================
-MIN_SCORE = 7
+# BULL MODE settings (Nifty > EMA200)
+BULL_CAPITAL_PER_TRADE = 50000
+BULL_MAX_POSITIONS = 3
+BULL_MIN_SCORE = 7
+BULL_MAX_PREV_DAY_MOVE = 5.0
+BULL_PRICE_PROXIMITY = 0.75  # Price > 75% of 52W high
+
+# HUNT MODE settings (Nifty > SMA200)
+HUNT_CAPITAL_PER_TRADE = 25000
+HUNT_MAX_POSITIONS = 2
+HUNT_MIN_SCORE = 7
+HUNT_MAX_PREV_DAY_MOVE = 3.0  # Stricter — no chasing
+HUNT_PRICE_PROXIMITY = 0.85  # Price > 85% of 52W high — near ATH only
+
+# Common settings
 MAX_PRICE = 5000
 MIN_VOLUME = 50000
 COOLDOWN_DAYS = 7
 TOP_N = 2
 ALERT_LOG_FILE = "alert_log.json"
-CAPITAL_PER_TRADE = 50000
-MAX_POSITIONS = 3
-MAX_PREV_DAY_MOVE = 5.0  # NEW: Skip if stock moved >5% yesterday
 
 ETF_KEYWORDS = [
     "ETF", "BEES", "GSEC", "TBILL", "LIQUID", "GILT",
@@ -48,16 +59,19 @@ def home():
 # ============================================================
 # TELEGRAM
 # ============================================================
-def send_telegram_alert(stock):
+def send_telegram_alert(stock, mode):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("T_BOT_CHAT_ID")
+    mode_emoji = "🚀" if mode == "BULL" else "🎯"
+    capital = BULL_CAPITAL_PER_TRADE if mode == "BULL" else HUNT_CAPITAL_PER_TRADE
     message = (
-        f"🚀 ALERT: {stock['symbol']}\n"
+        f"{mode_emoji} [{mode} MODE] ALERT: {stock['symbol']}\n"
         f"💰 Price: ₹{stock['price']}\n"
         f"⭐ Score: {stock['score']:.2f}/7\n"
         f"📈 52W High: ₹{stock['52w high']}\n"
         f"📊 Vol Ratio: {round(stock['Volume'] / stock['SOMA Volume'], 2) if stock['SOMA Volume'] else 'N/A'}x\n"
         f"📉 Prev Day Move: {stock.get('prev_day_move', 0):.2f}%\n"
+        f"💵 Deploying: ₹{capital:,.0f}\n"
         f"🕐 {datetime.now().strftime('%d-%b-%Y %H:%M')}"
     )
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -116,8 +130,7 @@ def mark_as_alerted(symbol):
 # ETF FILTER
 # ============================================================
 def is_etf_or_bond(symbol):
-    sym_upper = symbol.upper()
-    return any(keyword in sym_upper for keyword in ETF_KEYWORDS)
+    return any(keyword in symbol.upper() for keyword in ETF_KEYWORDS)
 
 
 # ============================================================
@@ -132,13 +145,13 @@ def safe_float(val):
 
 
 # ============================================================
-# HYBRID FILTERS — with NEW 5% previous day move filter
+# HYBRID FILTERS — MODE AWARE
 # ============================================================
-def hybrid_filters(stock):
+def hybrid_filters(stock, mode):
     try:
         symbol = stock.get("symbol", "")
 
-        # Filter ETFs and bonds
+        # ETF filter
         if is_etf_or_bond(symbol):
             return False
 
@@ -152,21 +165,28 @@ def hybrid_filters(stock):
         sma150 = safe_float(stock.get("SMA150"))
         sma_vol = safe_float(stock.get("SOMA Volume"))
         curr_vol = safe_float(stock.get("Volume"))
+        prev_day_move = safe_float(stock.get("prev_day_move", 0))
 
-        # Minimum volume filter
+        # Volume filter
         if curr_vol < MIN_VOLUME:
             return False
 
-        # NEW: Previous day move filter — skip if moved >5% yesterday
-        # Prevents chasing stocks that already made big moves
-        prev_day_move = safe_float(stock.get("prev_day_move", 0))
-        if prev_day_move > MAX_PREV_DAY_MOVE:
-            print(f"  ⏩ {symbol} moved {prev_day_move:.1f}% yesterday — skipping (chasing filter)")
+        # Mode specific settings
+        if mode == "BULL":
+            max_prev_move = BULL_MAX_PREV_DAY_MOVE
+            price_proximity = BULL_PRICE_PROXIMITY
+        else:  # HUNT
+            max_prev_move = HUNT_MAX_PREV_DAY_MOVE
+            price_proximity = HUNT_PRICE_PROXIMITY
+
+        # Previous day move filter
+        if prev_day_move > max_prev_move:
+            print(f"  ⏩ {symbol} moved {prev_day_move:.1f}% yesterday — skipping")
             return False
 
-        # Original filters — unchanged
+        # Core filters with mode-specific proximity
         return (
-            price > 0.75 * high_52 and
+            price > price_proximity * high_52 and
             price > sma150 and
             curr_vol > sma_vol
         )
@@ -175,7 +195,7 @@ def hybrid_filters(stock):
 
 
 # ============================================================
-# SCORE STOCK — unchanged
+# SCORE STOCK
 # ============================================================
 def score_stock(stock):
     score = 0
@@ -211,7 +231,7 @@ def score_stock(stock):
 
 
 # ============================================================
-# FETCH TECHNICAL DATA — NEW: adds prev_day_move calculation
+# FETCH TECHNICAL DATA
 # ============================================================
 def fetch_technical_data(symbols):
     data = []
@@ -231,14 +251,12 @@ def fetch_technical_data(symbols):
             sma150 = hist["Close"].rolling(window=150).mean().iloc[-1]
             sma_vol = hist["Volume"].rolling(window=50).mean().iloc[-1]
             curr_vol = hist["Volume"].iloc[-1]
-
-            # NEW: Calculate previous day move %
             prev_day_move = ((current_price - prev_price) / prev_price) * 100
 
             data.append({
                 "symbol": symbol,
                 "price": round(current_price, 2),
-                "prev_day_move": round(prev_day_move, 2),  # NEW
+                "prev_day_move": round(prev_day_move, 2),
                 "52w high": round(high_52, 2),
                 "SMA20": round(sma20, 2),
                 "SMA50": round(sma50, 2),
@@ -252,25 +270,44 @@ def fetch_technical_data(symbols):
 
 
 # ============================================================
-# MARKET CONDITION — EMA200
+# MARKET CONDITION — DUAL MODE
 # ============================================================
-def is_market_bullish():
+def get_market_mode():
     try:
         nifty = yf.Ticker("^NSEI")
         hist = nifty.history(period="300d")
         if hist.empty:
             print("Failed to fetch Nifty data.")
-            return False
+            return None
+
         current = hist["Close"].iloc[-1]
         sma50 = hist["Close"].rolling(window=50).mean().iloc[-1]
+        sma200 = hist["Close"].rolling(window=200).mean().iloc[-1]
         ema200 = hist["Close"].ewm(span=200, adjust=False).mean().iloc[-1]
-        print(f"Nifty: {round(current, 2)}, SMA50: {round(sma50, 2)}, EMA200: {round(ema200, 2)}")
-        is_bullish = current > sma50 and current > ema200
-        print(f"Market is {'BULLISH ✅' if is_bullish else 'NOT bullish ❌'}")
-        return is_bullish
+
+        print(f"Nifty: {round(current, 2)}")
+        print(f"SMA50: {round(sma50, 2)}")
+        print(f"SMA200: {round(sma200, 2)}")
+        print(f"EMA200: {round(ema200, 2)}")
+
+        # BULL MODE — strongest signal
+        if current > sma50 and current > ema200:
+            print("Mode: BULL 🚀")
+            return "BULL"
+
+        # HUNT MODE — moderate signal
+        elif current > sma200:
+            print("Mode: HUNT 🎯")
+            return "HUNT"
+
+        # Sleep — market too weak
+        else:
+            print("Mode: SLEEP 😴")
+            return None
+
     except Exception as e:
-        print(f"Error checking market trend: {e}")
-        return False
+        print(f"Error checking market: {e}")
+        return None
 
 
 # ============================================================
@@ -282,6 +319,7 @@ def run_bot():
         print(f"Alpha Warrior — {datetime.now().strftime('%d-%b-%Y %H:%M')}")
         print("=" * 50)
 
+        # Login
         print("Logging in to SmartAPI...")
         api_key = os.getenv("SMARTAPI_API_KEY")
         client_code = os.getenv("SMARTAPI_CLIENT_CODE")
@@ -298,72 +336,95 @@ def run_bot():
             f"✅ Alpha Warrior Online!\n"
             f"Angel One login successful\n"
             f"📅 {datetime.now().strftime('%d-%b-%Y %H:%M')}\n"
-            f"🔍 Nifty scanning started..."
+            f"🔍 Checking market mode..."
         )
 
-        # Market check
-        if not is_market_bullish():
-            print("Market is not bullish. Skipping scan.")
+        # Get market mode
+        mode = get_market_mode()
+
+        if mode is None:
             send_telegram_message(
-                f"⚠️ Market not bullish ({datetime.now().strftime('%d-%b-%Y')})\n"
-                f"Nifty below SMA50 or EMA200\n"
+                f"😴 Market too weak ({datetime.now().strftime('%d-%b-%Y')})\n"
+                f"Nifty below SMA200\n"
                 f"No trades today. See you tomorrow! 🕐"
             )
             return
 
+        # Set mode specific settings
+        if mode == "BULL":
+            capital_per_trade = BULL_CAPITAL_PER_TRADE
+            max_positions = BULL_MAX_POSITIONS
+            min_score = BULL_MIN_SCORE
+        else:  # HUNT
+            capital_per_trade = HUNT_CAPITAL_PER_TRADE
+            max_positions = HUNT_MAX_POSITIONS
+            min_score = HUNT_MIN_SCORE
+
         # Capital check
         available = get_available_capital()
         open_count = get_open_position_count()
-        print(f"Available capital: ₹{available:,.0f}")
-        print(f"Open positions: {open_count}/{MAX_POSITIONS}")
 
-        if available < CAPITAL_PER_TRADE:
+        print(f"Mode: {mode}")
+        print(f"Available capital: ₹{available:,.0f}")
+        print(f"Open positions: {open_count}/{max_positions}")
+        print(f"Capital per trade: ₹{capital_per_trade:,.0f}")
+
+        # Send mode notification
+        send_telegram_message(
+            f"{'🚀 BULL MODE ACTIVE!' if mode == 'BULL' else '🎯 HUNT MODE ACTIVE!'}\n"
+            f"Capital per trade: ₹{capital_per_trade:,.0f}\n"
+            f"Max positions: {max_positions}\n"
+            f"Available: ₹{available:,.0f}\n"
+            f"Open positions: {open_count}/{max_positions}"
+        )
+
+        if available < capital_per_trade:
             msg = (
                 f"⚠️ Insufficient capital!\n"
                 f"Available: ₹{available:,.0f}\n"
-                f"Need: ₹{CAPITAL_PER_TRADE:,.0f}\n"
+                f"Need: ₹{capital_per_trade:,.0f}\n"
                 f"Waiting for position to close..."
             )
             print(msg)
             send_telegram_message(msg)
             return
 
-        if open_count >= MAX_POSITIONS:
+        if open_count >= max_positions:
             msg = (
                 f"⚠️ Max positions reached!\n"
-                f"Open: {open_count}/{MAX_POSITIONS}\n"
+                f"Open: {open_count}/{max_positions}\n"
                 f"Waiting for exit before new trade..."
             )
             print(msg)
             send_telegram_message(msg)
             return
 
-        # Scan
+        # Scan stocks
         symbols = [entry["symbol"] for entry in nse_tokens]
-        print(f"Scanning {len(symbols)} symbols...")
+        print(f"Scanning {len(symbols)} symbols in {mode} mode...")
         tech_data = fetch_technical_data(symbols)
         print(f"Technical data fetched: {len(tech_data)}")
 
-        filtered = [s for s in tech_data if hybrid_filters(s)]
-        print(f"Stocks after hybrid filter: {len(filtered)}")
+        # Apply mode-aware filters
+        filtered = [s for s in tech_data if hybrid_filters(s, mode)]
+        print(f"Stocks after {mode} filter: {len(filtered)}")
 
         if not filtered:
             print("No stocks matched today.")
             send_telegram_message(
-                f"ℹ️ No stocks matched filters today\n"
+                f"ℹ️ No stocks matched {mode} filters today\n"
                 f"({datetime.now().strftime('%d-%b-%Y')})"
             )
             return
 
         scored = [score_stock(s) for s in filtered]
-        high_quality = [s for s in scored if s["score"] >= MIN_SCORE]
-        print(f"Stocks with score >= {MIN_SCORE}: {len(high_quality)}")
+        high_quality = [s for s in scored if s["score"] >= min_score]
+        print(f"Stocks with score >= {min_score}: {len(high_quality)}")
 
         if not high_quality:
-            print(f"No stocks scored >= {MIN_SCORE} today.")
             send_telegram_message(
-                f"ℹ️ No stocks scored >= {MIN_SCORE} today\n"
-                f"Market bullish but no quality setups"
+                f"ℹ️ No stocks scored >= {min_score} today\n"
+                f"Mode: {mode} — no quality setups"
             )
             return
 
@@ -371,32 +432,31 @@ def run_bot():
         fresh_picks = [s for s in ranked if not was_recently_alerted(s["symbol"])]
 
         if not fresh_picks:
-            print("All picks recently alerted.")
             send_telegram_message(
-                f"ℹ️ All top picks alerted within last {COOLDOWN_DAYS} days\n"
+                f"ℹ️ All top picks alerted within {COOLDOWN_DAYS} days\n"
                 f"No new trades today"
             )
             return
 
-        slots_available = MAX_POSITIONS - open_count
+        slots_available = max_positions - open_count
         top_stocks = fresh_picks[:min(TOP_N, slots_available)]
 
         for stock in top_stocks:
             symbol = stock["symbol"]
             price = stock["price"]
-            send_telegram_alert(stock)
+            send_telegram_alert(stock, mode)
             mark_as_alerted(symbol)
-            print(f"✅ Alert sent for {symbol} (Score: {stock['score']}, Prev move: {stock.get('prev_day_move', 0):.1f}%)")
-            print(f"🔵 Initiating auto buy for {symbol}...")
+            print(f"✅ Alert sent for {symbol} (Score: {stock['score']}, Mode: {mode})")
+            print(f"🔵 Initiating auto buy for {symbol} — ₹{capital_per_trade:,.0f}...")
             time.sleep(3)
-            success = auto_buy(symbol, price)
+            success = auto_buy(symbol, price, capital_per_trade, mode)
             if success:
                 print(f"✅ Auto buy successful for {symbol}")
             else:
                 print(f"❌ Auto buy failed for {symbol}")
-                send_telegram_message(f"❌ Auto buy FAILED for {symbol}. Please check manually!")
+                send_telegram_message(f"❌ Auto buy FAILED for {symbol}!")
 
-        print(f"\nDone! Processed {len(top_stocks)} stock(s) today.")
+        print(f"\nDone! Processed {len(top_stocks)} stock(s) in {mode} mode.")
 
     except Exception as e:
         error_msg = f"❌ Alpha Warrior error: {e}"
