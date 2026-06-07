@@ -1,7 +1,9 @@
 {
-  "available_capital": 149633,
+  "available_capital": 150976,
   "deployed_capital": 0,
   "open_positions": [],
   "closed_positions": [],
-  "total_realized_pnl": 0
+  "total_realized_pnl": 0,
+  "bull_trades": 0,
+  "hunt_trades": 0
 }
